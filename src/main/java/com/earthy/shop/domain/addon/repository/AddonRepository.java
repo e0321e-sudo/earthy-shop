@@ -4,9 +4,13 @@ import com.earthy.shop.domain.addon.entity.Addon;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface AddonRepository extends JpaRepository<Addon, Long> {
 
     // 활성 추가상품 목록 조회 (고객용 전체 추가상품 조회)
     List<Addon> findByActiveTrue();
+
+    // 활성 추가상품 단건 조회
+    Optional<Addon> findByIdAndActiveTrue(Long addonId);
 }

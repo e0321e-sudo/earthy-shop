@@ -91,4 +91,11 @@ public class MemberService {
 
         member.deactivate();
     }
+
+    // 활성 회원 엔티티 조회
+    @Transactional(readOnly = true)
+    public Member getActiveMemberEntity(String email) {
+        return memberRepository.findByEmailAndActiveTrue(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
+    }
 }

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -77,5 +78,12 @@ public class AddonService {
         addon.deactivate();
 
         return AdminAddonResponseDto.from(addon);
+    }
+
+    // 활성 추가상품 엔티티 조회
+    @Transactional(readOnly = true)
+    public Addon getActiveAddonEntity(Long addonId) {
+        return addonRepository.findByIdAndActiveTrue(addonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
     }
 }

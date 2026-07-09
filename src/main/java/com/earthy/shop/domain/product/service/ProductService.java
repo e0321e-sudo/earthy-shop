@@ -111,4 +111,11 @@ public class ProductService {
 
         return AdminProductResponseDto.from(product);
     }
+
+    // 활성 상품 엔티티 조회
+    @Transactional(readOnly = true)
+    public Product getActiveProductEntity(Long productId) {
+        return productRepository.findByIdAndActiveTrue(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
 }
