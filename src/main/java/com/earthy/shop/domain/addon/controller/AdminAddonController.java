@@ -1,0 +1,52 @@
+package com.earthy.shop.domain.addon.controller;
+
+import com.earthy.shop.common.response.ApiResponseDto;
+import com.earthy.shop.domain.addon.dto.request.AddonCreateRequestDto;
+import com.earthy.shop.domain.addon.dto.request.AddonUpdateRequestDto;
+import com.earthy.shop.domain.addon.dto.response.AdminAddonResponseDto;
+import com.earthy.shop.domain.addon.service.AddonService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+// 관리자용 추가상품 API
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/admin/addons")
+public class AdminAddonController {
+
+    private final AddonService addonService;
+
+    // 관리자용 전체 추가상품 목록 조회
+    @GetMapping
+    public ResponseEntity<ApiResponseDto<List<AdminAddonResponseDto>>> getAdminAddons() {
+        return ResponseEntity.ok(ApiResponseDto.success(addonService.getAdminAddons()));
+    }
+
+    // 관리자용 추가상품 등록
+    @PostMapping
+    public ResponseEntity<ApiResponseDto<AdminAddonResponseDto>> createAddon(
+            @RequestBody AddonCreateRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success("추가상품 등록 성공", addonService.createAddon(requestDto)));
+    }
+
+    // 관리자용 추가상품 수정
+    @PatchMapping("/{addonId}")
+    public ResponseEntity<ApiResponseDto<AdminAddonResponseDto>> updateAddon(
+            @PathVariable Long addonId,
+            @RequestBody AddonUpdateRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success("추가상품 수정 성공", addonService.updateAddon(addonId, requestDto)));
+    }
+
+    // 관리자용 추가상품 비활성화
+    @DeleteMapping("/{addonId}")
+    public ResponseEntity<ApiResponseDto<AdminAddonResponseDto>> deactivateAddon(
+            @PathVariable Long addonId
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success("추가상품 비활성화 성공", addonService.deactivateAddon(addonId)));
+    }
+}

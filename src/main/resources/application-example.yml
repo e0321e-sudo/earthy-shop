@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: earthy-shop
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/earthy_shop?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: your_username
+    password: your_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+server:
+  port: 8080

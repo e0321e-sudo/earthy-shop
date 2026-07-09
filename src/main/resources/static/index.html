@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EARTHY</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="EARTHY main navigation">
+      <nav class="category-nav" aria-label="Shop categories">
+        <a class="is-active" href="#home" data-view="home">HOME</a>
+        <a href="#shop" data-view="all">ALL</a>
+        <a href="#about" data-view="about">ABOUT US</a>
+        <a href="#shop" data-view="postcard">엽서</a>
+        <a href="#shop" data-view="poster">포스터</a>
+        <a href="#shop" data-view="frame">액자</a>
+        <a href="#notice">NOTICE</a>
+        <a href="#board">BOARD</a>
+      </nav>
+
+      <a class="brand" href="#home" data-view="home" aria-label="EARTHY home">
+        <img src="./assets/earthy-logo-transparent.png" alt="EARTHY" />
+      </a>
+
+      <div class="header-actions" aria-label="Shop actions">
+        <button class="icon-button" type="button" aria-label="Search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg>
+        </button>
+        <button class="icon-button" type="button" aria-label="Account">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.2-6 8-6s6.5 2 8 6"></path></svg>
+        </button>
+        <button class="icon-button cart-button" type="button" aria-label="Cart">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h15l-2 8H8L6 3H3"></path><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle></svg>
+          <span id="cartCount">0</span>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" id="home">
+        <a class="postcard-feature" href="#home" data-view="home" aria-label="EARTHY home">
+          <figure>
+            <img src="./assets/field-postcard.jpeg" alt="풀 언덕 풍경 엽서" />
+          </figure>
+        </a>
+      </section>
+
+      <section class="shop-section page-section" id="shop" hidden>
+        <div class="section-heading">
+          <p>shop</p>
+          <h2 id="shopTitle">ALL</h2>
+        </div>
+
+        <div class="product-grid" id="productGrid" aria-live="polite"></div>
+      </section>
+
+      <section class="detail-section page-section" id="productDetail" hidden>
+        <button class="back-button" type="button" id="backToList">목록</button>
+
+        <div class="detail-layout">
+          <div class="detail-media" id="detailMedia"></div>
+
+          <article class="detail-info">
+            <p class="detail-type" id="detailType"></p>
+            <h2 id="detailName"></h2>
+            <p class="detail-price" id="detailPrice"></p>
+
+            <dl class="delivery-info">
+              <div>
+                <dt>배송비</dt>
+                <dd>3,000원 (30,000원 이상 구매 시 무료)<br />제주 및 도서 산간 2,000원 추가</dd>
+              </div>
+            </dl>
+
+            <label class="frame-option detail-frame" id="detailFrameLabel">
+              <input type="checkbox" id="detailFrame" />
+              <span>액자 추가 +₩12,000</span>
+            </label>
+
+            <div class="quantity-row">
+              <span>수량</span>
+              <div class="quantity-control">
+                <button type="button" id="decreaseQty" aria-label="수량 줄이기">−</button>
+                <output id="quantityValue">1</output>
+                <button type="button" id="increaseQty" aria-label="수량 늘리기">＋</button>
+              </div>
+            </div>
+
+            <div class="order-summary">
+              <p><span>주문 수량</span><strong id="orderQty">1개</strong></p>
+              <p><span>총 상품 금액</span><strong id="orderTotal">₩0</strong></p>
+            </div>
+
+            <div class="detail-actions">
+              <button type="button" id="buyNow">구매하기</button>
+              <button type="button" id="addDetailToCart">장바구니에 담기</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="about-section page-section" id="about" hidden>
+        <div>
+          <p>about us</p>
+          <h2>Nature, remembered.<br />자연을 오래 간직하는 방법.</h2>
+        </div>
+        <p>
+          계절이 지나면 다시 만날 수 없는 풍경, 바람의 결, 빛의 온도, 숲의 숨결을 사진으로 담아
+          엽서와 포스터, 포토북으로 전합니다.
+          <br /><br />
+          자연을 오래 곁에 두는 가장 작은 방법 EARTHY.
+        </p>
+      </section>
+    </main>
+
+    <footer class="business-footer" aria-label="사업자 정보">
+      <p>
+        상호명: 얼씨 &nbsp; 대표자: 한훈석, 박수지 &nbsp; 사업장주소: 경남 창원시 소답동 148-3, 711호 &nbsp;
+        연락처: 070-0000-0000 &nbsp; 사업자등록번호: 000-00-00000
+      </p>
+      <p>
+        통신판매업신고번호: 제2026-경남창원-0000호 &nbsp; 대표자 이메일: earthy@gmail.com
+      </p>
+    </footer>
+
+    <aside class="cart-panel" aria-live="polite">
+      <strong>Cart</strong>
+      <ul id="cartItems"></ul>
+      <p id="cartTotal">₩0</p>
+    </aside>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
