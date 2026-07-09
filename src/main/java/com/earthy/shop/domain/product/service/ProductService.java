@@ -2,9 +2,12 @@ package com.earthy.shop.domain.product.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.domain.addon.dto.response.AddonResponseDto;
+import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.product.dto.request.ProductCreateRequestDto;
 import com.earthy.shop.domain.product.dto.request.ProductUpdateRequestDto;
 import com.earthy.shop.domain.product.dto.response.AdminProductResponseDto;
+import com.earthy.shop.domain.product.dto.response.ProductDetailResponseDto;
 import com.earthy.shop.domain.product.dto.response.ProductResponseDto;
 import com.earthy.shop.domain.product.entity.Product;
 import com.earthy.shop.domain.product.enums.ProductCategory;
@@ -21,6 +24,7 @@ import java.util.List;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final AddonService addonService;
 
     // 고객용 상품 목록 조회
     public List<ProductResponseDto> getProducts(ProductCategory category){
@@ -40,11 +44,18 @@ public class ProductService {
     }
 
     // 고객 상품 상세 조회
-    public ProductResponseDto getProduct(Long productId) {
+    public ProductDetailResponseDto getProduct(Long productId) {
         Product product = productRepository.findByIdAndActiveTrue(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
-        return ProductResponseDto.from(product);
+        List<AddonResponseDto> addons = List.of();
+
+        // 포스터 상품 추가상품 조회
+        if (product.getCategory() == ProductCategory.POSTER) {
+            addons = addonService.getAddons();
+        }
+
+        return ProductDetailResponseDto.of(product, addons);
     }
 
     // 관리자용 상품 등록
