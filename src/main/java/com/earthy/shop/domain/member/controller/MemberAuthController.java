@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 // 회원 인증 컨트롤러
-// 회원 인증 컨트롤러
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/member/auth")

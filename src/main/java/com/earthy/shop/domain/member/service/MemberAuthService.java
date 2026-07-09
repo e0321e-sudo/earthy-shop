@@ -25,7 +25,7 @@ public class MemberAuthService {
 
     // 회원 로그인
     public MemberLoginResponseDto login(MemberLoginRequestDto requestDto) {
-        Member member = memberRepository.findByEmail(requestDto.getEmail())
+        Member member = memberRepository.findByEmailAndActiveTrue(requestDto.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_NOT_FOUND));
 
         if (!passwordEncoder.matches(requestDto.getPassword(), member.getPassword())) {

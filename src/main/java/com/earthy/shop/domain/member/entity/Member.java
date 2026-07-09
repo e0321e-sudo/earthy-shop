@@ -55,4 +55,20 @@ public class Member extends BaseTimeEntity {
         this.role = UserRole.MEMBER;
         this.active = true;
     }
+
+    // 회원 정보 수정
+    public void updateInfo(String name, String phone) {
+        this.name = name;
+        this.phone = phone;
+    }
+
+    // 회원 비밀번호 변경
+    public void updatePassword(String password) {
+        this.password = password;
+    }
+
+    // 회원 비활성화
+    public void deactivate() {
+        this.active = false;
+    }
 }
