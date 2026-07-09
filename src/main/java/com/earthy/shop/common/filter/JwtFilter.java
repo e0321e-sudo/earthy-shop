@@ -1,6 +1,7 @@
 package com.earthy.shop.common.filter;
 
 import com.earthy.shop.common.config.JwtUtil;
+import com.earthy.shop.common.enums.UserRole;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,12 +34,13 @@ public class JwtFilter extends OncePerRequestFilter {
 
             if (jwtUtil.isValid(token)) {
                 String email = jwtUtil.extractEmail(token);
+                UserRole role = jwtUtil.extractRole(token);
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
                                 email,
                                 null,
-                                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                                List.of(new SimpleGrantedAuthority("ROLE_" + role.name()))
                         );
 
                 // 유효한 토큰 인증 정보 저장

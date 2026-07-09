@@ -1,5 +1,6 @@
 package com.earthy.shop.common.config;
 
+import com.earthy.shop.common.enums.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -26,9 +27,10 @@ public class JwtUtil {
     }
 
     // JWT 토큰 생성
-    public String generateToken(String email) {
+    public String generateToken(String email, UserRole role) {
         return Jwts.builder()
                 .subject(email)
+                .claim("role", role.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(key)
@@ -38,6 +40,12 @@ public class JwtUtil {
     // JWT 토큰 이메일 추출
     public String extractEmail(String token) {
         return getClaims(token).getSubject();
+    }
+
+    // JWT 토큰 권한 추출
+    public UserRole extractRole(String token) {
+        String role = getClaims(token).get("role", String.class);
+        return UserRole.valueOf(role);
     }
 
     // JWT 토큰 유효성 검증

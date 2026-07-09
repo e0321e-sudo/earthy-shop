@@ -1,6 +1,7 @@
 package com.earthy.shop.domain.admin.service;
 
 import com.earthy.shop.common.config.JwtUtil;
+import com.earthy.shop.common.enums.UserRole;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.domain.admin.dto.request.AdminLoginRequestDto;
@@ -31,7 +32,7 @@ public class AdminAuthService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
-        String accessToken = jwtUtil.generateToken(admin.getEmail());
+        String accessToken = jwtUtil.generateToken(admin.getEmail(), UserRole.ADMIN);
 
         return new AdminLoginResponseDto(accessToken);
     }
