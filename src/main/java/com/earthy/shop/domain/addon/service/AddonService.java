@@ -80,10 +80,20 @@ public class AddonService {
         return AdminAddonResponseDto.from(addon);
     }
 
-    // 활성 추가상품 엔티티 조회
+    // 활성 추가상품 조회
     @Transactional(readOnly = true)
-    public Addon getActiveAddonEntity(Long addonId) {
+    public Addon getActiveAddon(Long addonId) {
         return addonRepository.findByIdAndActiveTrue(addonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
+    }
+
+    // 추가상품 재고 차감
+    @Transactional
+    public void decreaseStock(Long addonId, int quantity) {
+        // 추가상품 조회
+        Addon addon = getActiveAddon(addonId);
+
+        // 추가상품 재고 차감
+        addon.decreaseStock(quantity);
     }
 }

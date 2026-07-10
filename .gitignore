@@ -12,3 +12,8 @@ out/
 # application secrets
 src/main/resources/application.yml
 src/main/resources/application-local.yml
+
+# 임시 결제 테스트 html 파일
+src/main/resources/static/payment-test.html
+src/main/resources/static/payment-success.html
+src/main/resources/static/payment-fail.html

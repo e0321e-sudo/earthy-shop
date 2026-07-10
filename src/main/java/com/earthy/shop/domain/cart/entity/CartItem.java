@@ -38,25 +38,33 @@ public class CartItem {
     @Column(nullable = false)
     private int quantity;
 
+    // 추가상품 수량
+    @Column(nullable = false)
+    private int addonQuantity;
+
     public CartItem(
             Member member,
             Product product,
             Addon addon,
-            int quantity
+            int quantity,
+            int addonQuantity
     ) {
         this.member = member;
         this.product = product;
         this.addon = addon;
         this.quantity = quantity;
+        this.addonQuantity = addonQuantity;
     }
 
     // 수량 변경
-    public void updateQuantity(int quantity) {
+    public void updateQuantity(int quantity, int addonQuantity) {
         this.quantity = quantity;
+        this.addonQuantity = addonQuantity;
     }
 
     // 수량 증가
-    public void increaseQuantity(int quantity) {
+    public void increaseQuantity(int quantity, int addonQuantity) {
         this.quantity += quantity;
+        this.addonQuantity += addonQuantity;
     }
 }

@@ -19,6 +19,9 @@ public class CartItemAddRequestDto {
     // 추가상품 ID
     private Long addonId;
 
+    // 추가상품 수량
+    private Integer addonQuantity;
+
     // 수량
     @NotNull
     @Min(value = 1, message = "수량은 1개 이상이어야 합니다.")

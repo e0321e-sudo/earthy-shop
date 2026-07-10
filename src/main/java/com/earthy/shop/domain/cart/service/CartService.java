@@ -34,7 +34,7 @@ public class CartService {
     // 장바구니 조회
     public CartResponseDto getCart(String email) {
         // 요청 회원 조회
-        Member member = memberService.getActiveMemberEntity(email);
+        Member member = memberService.getActiveMember(email);
 
         List<CartItemResponseDto> items = cartItemRepository.findByMember(member)
                 .stream()
@@ -48,17 +48,20 @@ public class CartService {
     @Transactional
     public CartResponseDto addCartItem(String email, CartItemAddRequestDto requestDto) {
         // 요청 회원 조회
-        Member member = memberService.getActiveMemberEntity(email);
+        Member member = memberService.getActiveMember(email);
 
         // 요청 상품 조회
-        Product product = productService.getActiveProductEntity(requestDto.getProductId());
+        Product product = productService.getActiveProduct(requestDto.getProductId());
 
         Addon addon = null;
 
         // 요청 추가상품 조회
         if (requestDto.getAddonId() != null) {
-            addon = addonService.getActiveAddonEntity(requestDto.getAddonId());
+            addon = addonService.getActiveAddon(requestDto.getAddonId());
         }
+
+        // 추가상품 수량 검증
+        int addonQuantity = resolveAddonQuantity(addon, requestDto.getAddonQuantity());
 
         // 동일 상품 장바구니 항목 조회
         CartItem cartItem = cartItemRepository.findByMemberAndProductAndAddon(member, product, addon)
@@ -70,11 +73,12 @@ public class CartService {
                     member,
                     product,
                     addon,
-                    requestDto.getQuantity()
+                    requestDto.getQuantity(),
+                    addonQuantity
             ));
         } else {
             // 기존 장바구니 항목 수량 증가
-            cartItem.increaseQuantity(requestDto.getQuantity());
+            cartItem.increaseQuantity(requestDto.getQuantity(), addonQuantity);
         }
 
         return getCart(email);
@@ -88,14 +92,17 @@ public class CartService {
             CartItemQuantityUpdateRequestDto requestDto
     ) {
         // 요청 회원 조회
-        Member member = memberService.getActiveMemberEntity(email);
+        Member member = memberService.getActiveMember(email);
 
         // 요청 회원의 장바구니 항목 조회
         CartItem cartItem = cartItemRepository.findByIdAndMember(cartItemId, member)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
 
+        // 추가상품 수량 검증
+        int addonQuantity = resolveUpdateAddonQuantity(cartItem, requestDto.getAddonQuantity());
+
         // 장바구니 항목 수량 변경
-        cartItem.updateQuantity(requestDto.getQuantity());
+        cartItem.updateQuantity(requestDto.getQuantity(), addonQuantity);
 
         return getCart(email);
     }
@@ -104,7 +111,7 @@ public class CartService {
     @Transactional
     public CartResponseDto deleteCartItem(String email, Long cartItemId) {
         // 요청 회원 조회
-        Member member = memberService.getActiveMemberEntity(email);
+        Member member = memberService.getActiveMember(email);
 
         // 요청 회원의 장바구니 항목 조회
         CartItem cartItem = cartItemRepository.findByIdAndMember(cartItemId, member)
@@ -120,9 +127,49 @@ public class CartService {
     @Transactional
     public void clearCart(String email) {
         // 요청 회원 조회
-        Member member = memberService.getActiveMemberEntity(email);
+        Member member = memberService.getActiveMember(email);
 
         // 요청 회원 장바구니 전체 삭제
         cartItemRepository.deleteByMember(member);
+    }
+
+    // 추가상품 수량 계산
+    private int resolveAddonQuantity(Addon addon, Integer addonQuantity) {
+        // 추가상품 미선택
+        if (addon == null) {
+            return 0;
+        }
+
+        // 추가상품 선택 후 수량 미입력
+        if (addonQuantity == null) {
+            return 1;
+        }
+
+        // 추가상품 수량 오류
+        if (addonQuantity < 1) {
+            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
+        }
+
+        return addonQuantity;
+    }
+
+    // 추가상품 변경 수량 계산
+    private int resolveUpdateAddonQuantity(CartItem cartItem, Integer addonQuantity) {
+        // 추가상품 없는 장바구니 항목
+        if (cartItem.getAddon() == null) {
+            return 0;
+        }
+
+        // 추가상품 수량 미변경
+        if (addonQuantity == null) {
+            return cartItem.getAddonQuantity();
+        }
+
+        // 추가상품 수량 오류
+        if (addonQuantity < 1) {
+            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
+        }
+
+        return addonQuantity;
     }
 }

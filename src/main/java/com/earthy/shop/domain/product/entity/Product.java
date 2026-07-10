@@ -1,6 +1,8 @@
 package com.earthy.shop.domain.product.entity;
 
 import com.earthy.shop.common.entity.BaseTimeEntity;
+import com.earthy.shop.common.exception.BusinessException;
+import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.domain.product.enums.ProductCategory;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -83,5 +85,18 @@ public class Product extends BaseTimeEntity {
     // 상품 비활성화
     public void deactivate() {
         this.active = false;
+    }
+
+    // 재고 차감
+    public void decreaseStock(int quantity) {
+        if (quantity < 1) {
+            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
+        }
+
+        if (this.stockQuantity < quantity) {
+            throw new BusinessException(ErrorCode.OUT_OF_STOCK);
+        }
+
+        this.stockQuantity -= quantity;
     }
 }

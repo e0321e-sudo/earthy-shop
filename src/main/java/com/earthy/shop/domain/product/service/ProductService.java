@@ -112,10 +112,20 @@ public class ProductService {
         return AdminProductResponseDto.from(product);
     }
 
-    // 활성 상품 엔티티 조회
+    // 활성 상품 조회
     @Transactional(readOnly = true)
-    public Product getActiveProductEntity(Long productId) {
+    public Product getActiveProduct(Long productId) {
         return productRepository.findByIdAndActiveTrue(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    // 상품 재고 차감
+    @Transactional
+    public void decreaseStock(Long productId, int quantity) {
+        // 상품 조회
+        Product product = getActiveProduct(productId);
+
+        // 상품 재고 차감
+        product.decreaseStock(quantity);
     }
 }

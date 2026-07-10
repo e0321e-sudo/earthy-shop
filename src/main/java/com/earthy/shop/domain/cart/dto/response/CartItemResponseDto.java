@@ -12,6 +12,7 @@ public record CartItemResponseDto(
         Long addonId,
         String addonName,
         int addonPrice,
+        int addonQuantity,
         int quantity,
         int itemTotalPrice
 ) {
@@ -20,7 +21,8 @@ public record CartItemResponseDto(
         Long addonId = cartItem.getAddon() == null ? null : cartItem.getAddon().getId();
         String addonName = cartItem.getAddon() == null ? null : cartItem.getAddon().getName();
 
-        int itemTotalPrice = (cartItem.getProduct().getPrice() + addonPrice) * cartItem.getQuantity();
+        int itemTotalPrice = (cartItem.getProduct().getPrice() * cartItem.getQuantity())
+                + (addonPrice * cartItem.getAddonQuantity());
 
         return new CartItemResponseDto(
                 cartItem.getId(),
@@ -31,6 +33,7 @@ public record CartItemResponseDto(
                 addonId,
                 addonName,
                 addonPrice,
+                cartItem.getAddonQuantity(),
                 cartItem.getQuantity(),
                 itemTotalPrice
         );

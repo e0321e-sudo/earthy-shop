@@ -23,3 +23,6 @@ admin:
 jwt:
   secret: your-base64-secret
   expiration: 3600000
+
+toss:
+  secret-key: your-toss-secret-key
