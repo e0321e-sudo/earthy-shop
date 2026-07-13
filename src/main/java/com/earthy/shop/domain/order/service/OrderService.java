@@ -116,6 +116,14 @@ public class OrderService {
         return OrderResponseDto.from(order);
     }
 
+    // 내 주문 단건 조회 (취소 처리용 Order 엔티티 반환)
+    public Order findMyOrder(String email, Long orderId) {
+        Member member = memberService.getActiveMember(email);
+
+        return orderRepository.findByIdAndMember(orderId, member)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
     // 관리자 주문 목록 조회
     public List<OrderResponseDto> getOrders() {
         return orderRepository.findAllByOrderByCreatedAtDesc()

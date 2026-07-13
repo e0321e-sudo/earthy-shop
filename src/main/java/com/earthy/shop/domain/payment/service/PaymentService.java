@@ -9,6 +9,7 @@ import com.earthy.shop.domain.order.service.OrderService;
 import com.earthy.shop.domain.payment.client.TossPaymentClient;
 import com.earthy.shop.domain.payment.dto.request.PaymentConfirmRequestDto;
 import com.earthy.shop.domain.payment.dto.response.PaymentResponseDto;
+import com.earthy.shop.domain.payment.dto.toss.TossCancelRequestDto;
 import com.earthy.shop.domain.payment.dto.toss.TossConfirmRequestDto;
 import com.earthy.shop.domain.payment.dto.toss.TossConfirmResponseDto;
 import com.earthy.shop.domain.payment.entity.Payment;
@@ -101,5 +102,29 @@ public class PaymentService {
         Payment savedPayment = paymentRepository.save(payment);
 
         return PaymentResponseDto.from(savedPayment);
+    }
+
+    // 결제 취소
+    @Transactional
+    public PaymentResponseDto cancelPayment(Order order, String cancelReason) {
+        // 결제 완료 정보 조회
+        Payment payment = paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+        // Toss 결제 취소 요청
+        TossConfirmResponseDto tossResponse = tossPaymentClient.cancelPayment(
+                payment.getPaymentKey(),
+                new TossCancelRequestDto(cancelReason)
+        );
+
+        // Toss 결제 취소 상태 검증
+        if (!"CANCELED".equals(tossResponse.status())) {
+            throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+        }
+
+        // 결제 취소 처리
+        payment.cancel();
+
+        return PaymentResponseDto.from(payment);
     }
 }

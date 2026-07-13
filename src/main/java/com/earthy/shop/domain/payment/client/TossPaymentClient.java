@@ -1,5 +1,6 @@
 package com.earthy.shop.domain.payment.client;
 
+import com.earthy.shop.domain.payment.dto.toss.TossCancelRequestDto;
 import com.earthy.shop.domain.payment.dto.toss.TossConfirmRequestDto;
 import com.earthy.shop.domain.payment.dto.toss.TossConfirmResponseDto;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,17 @@ public class TossPaymentClient {
     public TossConfirmResponseDto confirmPayment(TossConfirmRequestDto requestDto) {
         return restClient.post()
                 .uri("/v1/payments/confirm")
+                .header(HttpHeaders.AUTHORIZATION, createAuthorizationHeader())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(requestDto)
+                .retrieve()
+                .body(TossConfirmResponseDto.class);
+    }
+
+    // 결제 취소 요청
+    public TossConfirmResponseDto cancelPayment(String paymentKey, TossCancelRequestDto requestDto) {
+        return restClient.post()
+                .uri("/v1/payments/{paymentKey}/cancel", paymentKey)
                 .header(HttpHeaders.AUTHORIZATION, createAuthorizationHeader())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestDto)

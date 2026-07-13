@@ -99,4 +99,13 @@ public class Product extends BaseTimeEntity {
 
         this.stockQuantity -= quantity;
     }
+
+    // 재고 증가
+    public void increaseStock(int quantity) {
+        if (quantity < 1) {
+            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
+        }
+
+        this.stockQuantity += quantity;
+    }
 }

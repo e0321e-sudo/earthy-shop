@@ -80,13 +80,6 @@ public class AddonService {
         return AdminAddonResponseDto.from(addon);
     }
 
-    // 활성 추가상품 조회
-    @Transactional(readOnly = true)
-    public Addon getActiveAddon(Long addonId) {
-        return addonRepository.findByIdAndActiveTrue(addonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
-    }
-
     // 추가상품 재고 차감
     @Transactional
     public void decreaseStock(Long addonId, int quantity) {
@@ -95,5 +88,25 @@ public class AddonService {
 
         // 추가상품 재고 차감
         addon.decreaseStock(quantity);
+    }
+
+    // 추가상품 재고 복구
+    @Transactional
+    public void increaseStock(Long addonId, int quantity) {
+        Addon addon = findAddon(addonId);
+
+        addon.increaseStock(quantity);
+    }
+
+    // 활성 추가상품 조회
+    public Addon getActiveAddon(Long addonId) {
+        return addonRepository.findByIdAndActiveTrue(addonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
+    }
+
+    // 추가상품 단건 조회
+    public Addon findAddon(Long addonId) {
+        return addonRepository.findById(addonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
     }
 }

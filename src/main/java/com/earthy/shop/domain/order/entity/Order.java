@@ -1,6 +1,8 @@
 package com.earthy.shop.domain.order.entity;
 
 import com.earthy.shop.common.entity.BaseTimeEntity;
+import com.earthy.shop.common.exception.BusinessException;
+import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.order.enums.OrderStatus;
 import jakarta.persistence.*;
@@ -96,5 +98,16 @@ public class Order extends BaseTimeEntity {
     public void addOrderItem(OrderItem orderItem) {
         orderItems.add(orderItem);
         orderItem.assignOrder(this);
+    }
+
+    // 주문 취소
+    public void cancel() {
+        if (this.status != OrderStatus.PENDING
+                && this.status != OrderStatus.PAID
+                && this.status != OrderStatus.PREPARING) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_CANCELABLE);
+        }
+
+        this.status = OrderStatus.CANCELED;
     }
 }

@@ -1,13 +1,17 @@
 package com.earthy.shop.domain.order.controller;
 
 import com.earthy.shop.common.response.ApiResponseDto;
+import com.earthy.shop.common.security.UserDetailsImpl;
+import com.earthy.shop.domain.order.dto.request.OrderCancelRequestDto;
 import com.earthy.shop.domain.order.dto.request.OrderCreateRequestDto;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
+import com.earthy.shop.domain.order.service.OrderCancelService;
 import com.earthy.shop.domain.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +22,7 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderCancelService orderCancelService;
 
     // 주문 생성
     @PostMapping
@@ -49,5 +54,22 @@ public class OrderController {
         String email = authentication.getName();
 
         return ResponseEntity.ok(ApiResponseDto.success("내 주문 상세 조회 성공", orderService.getMyOrder(email,orderId)));
+    }
+
+    // 내 주문 취소
+    @PatchMapping("/{orderId}/cancel")
+    public ResponseEntity<ApiResponseDto<OrderResponseDto>> cancelMyOrder(
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @PathVariable Long orderId,
+            @RequestBody OrderCancelRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                "주문 취소 성공",
+                orderCancelService.cancelMyOrder(
+                        userDetails.getUsername(),
+                        orderId,
+                        requestDto.getCancelReason()
+                )
+        ));
     }
 }

@@ -8,6 +8,10 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum ErrorCode {
 
+    // 공통
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "잘못된 요청입니다."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "서버 내부 오류가 발생했습니다."),
+
     // 상품
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "해당 상품을 찾을 수 없습니다."),
 
@@ -33,13 +37,16 @@ public enum ErrorCode {
 
     // 주문
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다."),
+    ORDER_NOT_CANCELABLE(HttpStatus.BAD_REQUEST, "ORDER_NOT_CANCELABLE", "취소할 수 없는 주문 상태입니다."),
 
     // 결제
     PAYMENT_ALREADY_COMPLETED(HttpStatus.BAD_REQUEST, "PAYMENT_ALREADY_COMPLETED", "이미 결제가 완료된 주문입니다."),
     PAYMENT_CONFIRM_FAILED(HttpStatus.BAD_REQUEST, "PAYMENT_CONFIRM_FAILED", "결제 승인에 실패했습니다."),
     DUPLICATE_PAYMENT_KEY(HttpStatus.CONFLICT, "DUPLICATE_PAYMENT_KEY", "이미 사용된 결제 키입니다."),
     PAYMENT_ORDER_MISMATCH(HttpStatus.BAD_REQUEST, "PAYMENT_ORDER_MISMATCH", "주문번호가 일치하지 않습니다."),
-    PAYMENT_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "PAYMENT_AMOUNT_MISMATCH", "결제 금액이 주문 금액과 일치하지 않습니다.");
+    PAYMENT_AMOUNT_MISMATCH(HttpStatus.BAD_REQUEST, "PAYMENT_AMOUNT_MISMATCH", "결제 금액이 주문 금액과 일치하지 않습니다."),
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "결제 정보를 찾을 수 없습니다."),
+    PAYMENT_CANCEL_FAILED(HttpStatus.BAD_REQUEST, "PAYMENT_CANCEL_FAILED", "결제 취소에 실패했습니다.");
 
     private final HttpStatus status;
     private final String code;
