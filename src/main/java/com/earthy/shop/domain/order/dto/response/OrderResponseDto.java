@@ -19,7 +19,9 @@ public record OrderResponseDto(
         OrderStatus status,
         String statusDescription,
         List<OrderItemResponseDto> items,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        String carrier,
+        String trackingNumber
 ) {
     public static OrderResponseDto from(Order order) {
         return new OrderResponseDto(
@@ -38,7 +40,9 @@ public record OrderResponseDto(
                         .stream()
                         .map(OrderItemResponseDto::from)
                         .toList(),
-                order.getCreatedAt()
+                order.getCreatedAt(),
+                order.getCarrier(),
+                order.getTrackingNumber()
         );
     }
 }

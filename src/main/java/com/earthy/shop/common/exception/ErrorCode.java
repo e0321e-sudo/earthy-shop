@@ -38,6 +38,8 @@ public enum ErrorCode {
     // 주문
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다."),
     ORDER_NOT_CANCELABLE(HttpStatus.BAD_REQUEST, "ORDER_NOT_CANCELABLE", "취소할 수 없는 주문 상태입니다."),
+    INVALID_ORDER_STATUS_CHANGE(HttpStatus.BAD_REQUEST, "INVALID_ORDER_STATUS_CHANGE", "변경할 수 없는 주문 상태입니다."),
+    SHIPPING_INFO_REQUIRED(HttpStatus.BAD_REQUEST, "SHIPPING_INFO_REQUIRED", "배송 정보는 필수입니다."),
 
     // 결제
     PAYMENT_ALREADY_COMPLETED(HttpStatus.BAD_REQUEST, "PAYMENT_ALREADY_COMPLETED", "이미 결제가 완료된 주문입니다."),

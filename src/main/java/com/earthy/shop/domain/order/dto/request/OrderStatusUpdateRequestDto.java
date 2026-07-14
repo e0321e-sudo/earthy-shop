@@ -14,4 +14,7 @@ public class OrderStatusUpdateRequestDto {
     // 주문 상태
     @NotNull(message = "주문 상태를 입력해주세요.")
     private OrderStatus status;
+
+    private String carrier;
+    private String trackingNumber;
 }

@@ -149,7 +149,7 @@ public class OrderService {
     // 주문 결제 완료 처리
     @Transactional
     public void payOrder(Order order) {
-        order.updateStatus(OrderStatus.PAID);
+        order.pay();
     }
 
     // 관리자 주문 상태 변경
@@ -157,6 +157,14 @@ public class OrderService {
     public OrderResponseDto updateOrderStatus(Long orderId, OrderStatusUpdateRequestDto requestDto) {
         // 주문 조회
         Order order = getOrder(orderId);
+
+        // 배송 정보 등록
+        if (requestDto.getStatus() == OrderStatus.SHIPPED) {
+            order.registerShipment(
+                    requestDto.getCarrier(),
+                    requestDto.getTrackingNumber()
+            );
+        }
 
         // 주문 상태 변경
         order.updateStatus(requestDto.getStatus());

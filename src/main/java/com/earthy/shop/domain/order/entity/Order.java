@@ -67,6 +67,12 @@ public class Order extends BaseTimeEntity {
     @Column(nullable = false)
     private OrderStatus status = OrderStatus.PENDING;
 
+    // 택배사
+    private String carrier;
+
+    // 송장번호
+    private String trackingNumber;
+
     public Order(
             String orderNumber,
             Member member,
@@ -91,7 +97,30 @@ public class Order extends BaseTimeEntity {
 
     // 주문 상태 변경
     public void updateStatus(OrderStatus status) {
+        validateStatusChange(status);
+
         this.status = status;
+    }
+
+    // 주문 상태 변경 검증
+    private void validateStatusChange(OrderStatus nextStatus) {
+        boolean valid =
+                (this.status == OrderStatus.PAID && nextStatus == OrderStatus.PREPARING)
+                        || (this.status == OrderStatus.PREPARING && nextStatus == OrderStatus.SHIPPED)
+                        || (this.status == OrderStatus.SHIPPED && nextStatus == OrderStatus.DELIVERED);
+
+        if (!valid) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS_CHANGE);
+        }
+    }
+
+    // 주문 결제 완료
+    public void pay() {
+        if (this.status != OrderStatus.PENDING) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS_CHANGE);
+        }
+
+        this.status = OrderStatus.PAID;
     }
 
     // 주문 상품 추가
@@ -109,5 +138,16 @@ public class Order extends BaseTimeEntity {
         }
 
         this.status = OrderStatus.CANCELED;
+    }
+
+    // 배송 정보 등록
+    public void registerShipment(String carrier, String trackingNumber) {
+        if (carrier == null || carrier.isBlank()
+                || trackingNumber == null || trackingNumber.isBlank()) {
+            throw new BusinessException(ErrorCode.SHIPPING_INFO_REQUIRED);
+        }
+
+        this.carrier = carrier;
+        this.trackingNumber = trackingNumber;
     }
 }
