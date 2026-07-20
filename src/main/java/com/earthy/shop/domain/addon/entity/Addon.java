@@ -40,6 +40,10 @@ public class Addon extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    // 삭제 상태
+    @Column(nullable = false)
+    private boolean deleted = false;
+
     // 추가상품 생성
     public Addon(
             String name,
@@ -52,6 +56,7 @@ public class Addon extends BaseTimeEntity {
         this.price = price;
         this.stockQuantity = stockQuantity;
         this.active = true;
+        this.deleted = false;
     }
 
     // 추가상품 수정
@@ -69,6 +74,17 @@ public class Addon extends BaseTimeEntity {
 
     // 추가상품 비활성화
     public void deactivate() {
+        this.active = false;
+    }
+
+    // 추가상품 활성화
+    public void activate() {
+        this.active = true;
+    }
+
+    // 추가상품 삭제
+    public void delete() {
+        this.deleted = true;
         this.active = false;
     }
 

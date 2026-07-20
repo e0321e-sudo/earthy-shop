@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 // 장바구니 서비스
 @Service
@@ -67,6 +68,16 @@ public class CartService {
         CartItem cartItem = cartItemRepository.findByMemberAndProductAndAddon(member, product, addon)
                 .orElse(null);
 
+        // 현재 장바구니 수량을 포함한 재고 검증
+        validateCartStock(
+                member,
+                product,
+                cartItem == null ? requestDto.getQuantity() : cartItem.getQuantity() + requestDto.getQuantity(),
+                addon,
+                cartItem == null ? addonQuantity : cartItem.getAddonQuantity() + addonQuantity,
+                cartItem
+        );
+
         if (cartItem == null) {
             // 신규 장바구니 항목 생성
             cartItemRepository.save(new CartItem(
@@ -101,6 +112,16 @@ public class CartService {
         // 추가상품 수량 검증
         int addonQuantity = resolveUpdateAddonQuantity(cartItem, requestDto.getAddonQuantity());
 
+        // 변경 후 장바구니 수량 기준 재고 검증
+        validateCartStock(
+                member,
+                cartItem.getProduct(),
+                requestDto.getQuantity(),
+                cartItem.getAddon(),
+                addonQuantity,
+                cartItem
+        );
+
         // 장바구니 항목 수량 변경
         cartItem.updateQuantity(requestDto.getQuantity(), addonQuantity);
 
@@ -131,6 +152,22 @@ public class CartService {
 
         // 요청 회원 장바구니 전체 삭제
         cartItemRepository.deleteByMember(member);
+    }
+
+    // 선택 장바구니 항목 삭제
+    @Transactional
+    public void deleteCartItems(String email, List<Long> cartItemIds) {
+        // 요청 회원 조회
+        Member member = memberService.getActiveMember(email);
+
+        for (Long cartItemId : cartItemIds) {
+            // 요청 회원의 장바구니 항목 조회
+            CartItem cartItem = cartItemRepository.findByIdAndMember(cartItemId, member)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
+
+            // 장바구니 항목 삭제
+            cartItemRepository.delete(cartItem);
+        }
     }
 
     // 추가상품 수량 계산
@@ -171,5 +208,45 @@ public class CartService {
         }
 
         return addonQuantity;
+    }
+
+    // 장바구니 전체 수량 기준 재고 검증
+    private void validateCartStock(
+            Member member,
+            Product product,
+            int productQuantity,
+            Addon addon,
+            int addonQuantity,
+            CartItem targetCartItem
+    ) {
+        List<CartItem> cartItems = cartItemRepository.findByMember(member);
+
+        // 같은 상품이 다른 옵션으로 담긴 수량까지 합산
+        int totalProductQuantity = cartItems.stream()
+                .filter(cartItem -> !isSameCartItem(cartItem, targetCartItem))
+                .filter(cartItem -> Objects.equals(cartItem.getProduct().getId(), product.getId()))
+                .mapToInt(CartItem::getQuantity)
+                .sum() + productQuantity;
+
+        productService.validateStock(product.getId(), totalProductQuantity);
+
+        if (addon == null) {
+            return;
+        }
+
+        // 같은 추가상품이 다른 장바구니 항목에 담긴 수량까지 합산
+        int totalAddonQuantity = cartItems.stream()
+                .filter(cartItem -> !isSameCartItem(cartItem, targetCartItem))
+                .filter(cartItem -> cartItem.getAddon() != null)
+                .filter(cartItem -> Objects.equals(cartItem.getAddon().getId(), addon.getId()))
+                .mapToInt(CartItem::getAddonQuantity)
+                .sum() + addonQuantity;
+
+        addonService.validateStock(addon.getId(), totalAddonQuantity);
+    }
+
+    // 검증 대상 장바구니 항목 제외 여부
+    private boolean isSameCartItem(CartItem cartItem, CartItem targetCartItem) {
+        return targetCartItem != null && Objects.equals(cartItem.getId(), targetCartItem.getId());
     }
 }

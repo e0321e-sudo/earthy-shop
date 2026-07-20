@@ -52,15 +52,29 @@ public class Order extends BaseTimeEntity {
     private String address;
 
     // 상세 주소
-    @Column(nullable = false)
     private String detailAddress;
 
     // 배송 메모
     private String deliveryMemo;
 
-    // 주문 총 금액
+    // 상품 총 금액
+    @Column(nullable = false)
+    private int productTotalPrice;
+
+    // 기본 배송비
+    @Column(nullable = false)
+    private int deliveryFee;
+
+    // 지역별 배송비
+    @Column(nullable = false)
+    private int remoteAreaDeliveryFee;
+
+    // 최종 결제 금액
     @Column(nullable = false)
     private int totalPrice;
+
+    // 결제 방법
+    private String paymentMethod;
 
     // 주문 상태
     @Enumerated(EnumType.STRING)
@@ -82,7 +96,9 @@ public class Order extends BaseTimeEntity {
             String address,
             String detailAddress,
             String deliveryMemo,
-            int totalPrice
+            int productTotalPrice,
+            int deliveryFee,
+            int remoteAreaDeliveryFee
     ) {
         this.orderNumber = orderNumber;
         this.member = member;
@@ -92,7 +108,11 @@ public class Order extends BaseTimeEntity {
         this.address = address;
         this.detailAddress = detailAddress;
         this.deliveryMemo = deliveryMemo;
-        this.totalPrice = totalPrice;
+        this.productTotalPrice = productTotalPrice;
+        this.deliveryFee = deliveryFee;
+        this.remoteAreaDeliveryFee = remoteAreaDeliveryFee;
+        this.totalPrice = productTotalPrice + deliveryFee + remoteAreaDeliveryFee;
+        this.status = OrderStatus.PENDING;
     }
 
     // 주문 상태 변경
@@ -115,11 +135,12 @@ public class Order extends BaseTimeEntity {
     }
 
     // 주문 결제 완료
-    public void pay() {
+    public void pay(String paymentMethod) {
         if (this.status != OrderStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS_CHANGE);
         }
 
+        this.paymentMethod = paymentMethod;
         this.status = OrderStatus.PAID;
     }
 

@@ -39,15 +39,21 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         ErrorCode errorCode = ErrorCode.INVALID_REQUEST;
+        String message = e.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .findFirst()
+                .map(fieldError -> fieldError.getDefaultMessage())
+                .orElse(errorCode.getMessage());
 
         log.warn("[VALIDATION EXCEPTION] method={} | uri={} | message={}",
                 request.getMethod(),
                 request.getRequestURI(),
-                e.getMessage());
+                message);
 
         return ResponseEntity
                 .status(errorCode.getStatus())
-                .body(ErrorResponseDto.from(errorCode));
+                .body(ErrorResponseDto.of(errorCode, message));
     }
 
     // 요청 본문 파싱 예외 처리

@@ -22,10 +22,23 @@ public class AdminInitializer {
     @Value("${admin.password}")
     private String adminPassword;
 
+    @Value("${admin.sync-password:false}")
+    private boolean syncPassword;
+
     @Bean
     public CommandLineRunner initAdmin() {
         return args -> {
             if (adminRepository.existsByEmail(adminEmail)) {
+                if (syncPassword) {
+                    Admin admin = adminRepository.findByEmail(adminEmail)
+                            .orElseThrow();
+
+                    if (!passwordEncoder.matches(adminPassword, admin.getPassword())) {
+                        admin.updatePassword(passwordEncoder.encode(adminPassword));
+                        adminRepository.save(admin);
+                    }
+                }
+
                 return;
             }
 

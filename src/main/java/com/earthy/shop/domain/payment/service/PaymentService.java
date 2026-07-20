@@ -96,7 +96,7 @@ public class PaymentService {
         );
 
         // 주문 결제 완료 처리
-        orderService.payOrder(order);
+        orderService.payOrder(order, tossResponse.method());
 
         // 결제 저장
         Payment savedPayment = paymentRepository.save(payment);
@@ -106,7 +106,7 @@ public class PaymentService {
 
     // 결제 취소
     @Transactional
-    public PaymentResponseDto cancelPayment(Order order, String cancelReason) {
+    public void cancelPayment(Order order, String cancelReason) {
         // 결제 완료 정보 조회
         Payment payment = paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
@@ -124,7 +124,5 @@ public class PaymentService {
 
         // 결제 취소 처리
         payment.cancel();
-
-        return PaymentResponseDto.from(payment);
     }
 }

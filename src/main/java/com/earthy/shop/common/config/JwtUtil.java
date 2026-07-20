@@ -17,13 +17,16 @@ public class JwtUtil {
 
     private final SecretKey key;
     private final long expiration;
+    private final long refreshExpiration;
 
     public JwtUtil(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration}") long expiration
+            @Value("${jwt.expiration}") long expiration,
+            @Value("${jwt.refresh-expiration}") long refreshExpiration
     ) {
         this.key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
         this.expiration = expiration;
+        this.refreshExpiration = refreshExpiration;
     }
 
     // JWT 토큰 생성
@@ -33,6 +36,17 @@ public class JwtUtil {
                 .claim("role", role.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(key)
+                .compact();
+    }
+
+    // JWT 리프레시 토큰 생성
+    public String generateRefreshToken(String email, UserRole role) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("role", role.name())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
                 .signWith(key)
                 .compact();
     }

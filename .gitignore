@@ -9,6 +9,12 @@ out/
 
 *.log
 
+.DS_Store
+**/.DS_Store
+
+frontend/node_modules/
+frontend/dist/
+
 # application secrets
 src/main/resources/application.yml
 src/main/resources/application-local.yml

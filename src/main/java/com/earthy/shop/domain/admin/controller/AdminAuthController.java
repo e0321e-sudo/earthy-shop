@@ -2,6 +2,8 @@ package com.earthy.shop.domain.admin.controller;
 
 import com.earthy.shop.common.response.ApiResponseDto;
 import com.earthy.shop.domain.admin.dto.request.AdminLoginRequestDto;
+import com.earthy.shop.domain.admin.dto.request.AdminLogoutRequestDto;
+import com.earthy.shop.domain.admin.dto.request.AdminTokenRefreshRequestDto;
 import com.earthy.shop.domain.admin.dto.response.AdminLoginResponseDto;
 import com.earthy.shop.domain.admin.service.AdminAuthService;
 import jakarta.validation.Valid;
@@ -26,5 +28,23 @@ public class AdminAuthController {
             @Valid @RequestBody AdminLoginRequestDto requestDto
     ) {
         return ResponseEntity.ok(ApiResponseDto.success("관리자 로그인 성공", adminAuthService.login(requestDto)));
+    }
+
+    // 관리자 토큰 재발급
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponseDto<AdminLoginResponseDto>> refreshToken(
+            @Valid @RequestBody AdminTokenRefreshRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success("관리자 토큰 재발급 성공", adminAuthService.refreshToken(requestDto)));
+    }
+
+    // 관리자 로그아웃
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponseDto<Void>> logout(
+            @Valid @RequestBody AdminLogoutRequestDto requestDto
+    ) {
+        adminAuthService.logout(requestDto);
+
+        return ResponseEntity.ok(ApiResponseDto.success("관리자 로그아웃 성공", null));
     }
 }

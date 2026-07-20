@@ -48,6 +48,10 @@ public class Product extends BaseTimeEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    // 삭제 상태
+    @Column(nullable = false)
+    private boolean deleted = false;
+
     public Product(
             String name,
             ProductCategory category,
@@ -63,6 +67,7 @@ public class Product extends BaseTimeEntity {
         this.description = description;
         this.stockQuantity = stockQuantity;
         this.active = true;
+        this.deleted = false;
     }
 
     // 상품 수정
@@ -84,6 +89,17 @@ public class Product extends BaseTimeEntity {
 
     // 상품 비활성화
     public void deactivate() {
+        this.active = false;
+    }
+
+    // 상품 활성화
+    public void activate() {
+        this.active = true;
+    }
+
+    // 상품 삭제
+    public void delete() {
+        this.deleted = true;
         this.active = false;
     }
 

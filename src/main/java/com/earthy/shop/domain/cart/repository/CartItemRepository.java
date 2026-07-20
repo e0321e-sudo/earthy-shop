@@ -22,4 +22,10 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 
     // 회원 장바구니 전체 삭제
     void deleteByMember(Member member);
+
+    // 상품이 담긴 장바구니 항목 삭제
+    void deleteByProduct(Product product);
+
+    // 추가상품이 담긴 장바구니 항목 삭제
+    void deleteByAddon(Addon addon);
 }

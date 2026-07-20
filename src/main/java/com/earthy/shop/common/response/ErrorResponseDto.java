@@ -16,4 +16,13 @@ public record ErrorResponseDto(
                 errorCode.getMessage()
         );
     }
+
+    // 실패 응답 생성
+    public static ErrorResponseDto of(ErrorCode errorCode, String message) {
+        return new ErrorResponseDto(
+                false,
+                errorCode.getCode(),
+                message
+        );
+    }
 }

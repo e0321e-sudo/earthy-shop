@@ -19,10 +19,12 @@ server:
 admin:
   email: your-admin-email@example.com
   password: your-admin-password
+  sync-password: false
 
 jwt:
   secret: your-base64-secret
   expiration: 3600000
+  refresh-expiration: 1209600000
 
 toss:
   secret-key: your-toss-secret-key

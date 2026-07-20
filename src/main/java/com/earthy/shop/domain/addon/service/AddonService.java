@@ -2,6 +2,8 @@ package com.earthy.shop.domain.addon.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.response.PageResponseDto;
+import com.earthy.shop.domain.cart.repository.CartItemRepository;
 import com.earthy.shop.domain.addon.dto.request.AddonCreateRequestDto;
 import com.earthy.shop.domain.addon.dto.request.AddonUpdateRequestDto;
 import com.earthy.shop.domain.addon.dto.response.AddonResponseDto;
@@ -9,6 +11,7 @@ import com.earthy.shop.domain.addon.dto.response.AdminAddonResponseDto;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.repository.AddonRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,21 +24,20 @@ import java.util.Optional;
 public class AddonService {
 
     private final AddonRepository addonRepository;
+    private final CartItemRepository cartItemRepository;
 
     // 고객용 추가상품 목록 조회
     public List<AddonResponseDto> getAddons() {
-        return addonRepository.findByActiveTrue()
+        return addonRepository.findByActiveTrueAndDeletedFalse()
                 .stream()
                 .map(AddonResponseDto::from)
                 .toList();
     }
 
     // 관리자용 전체 추가상품 목록 조회
-    public List<AdminAddonResponseDto> getAdminAddons() {
-        return addonRepository.findAll()
-                .stream()
-                .map(AdminAddonResponseDto::from)
-                .toList();
+    public PageResponseDto<AdminAddonResponseDto> getAdminAddons(Pageable pageable) {
+        return PageResponseDto.from(addonRepository.findByDeletedFalse(pageable)
+                .map(AdminAddonResponseDto::from));
     }
 
     // 관리자용 추가상품 등록
@@ -72,12 +74,33 @@ public class AddonService {
     // 관리자용 추가상품 비활성화
     @Transactional
     public AdminAddonResponseDto deactivateAddon(Long addonId) {
-        Addon addon = addonRepository.findById(addonId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
+        Addon addon = findAddon(addonId);
 
         addon.deactivate();
 
         return AdminAddonResponseDto.from(addon);
+    }
+
+    // 관리자용 추가상품 활성화
+    @Transactional
+    public AdminAddonResponseDto activateAddon(Long addonId) {
+        Addon addon = findAddon(addonId);
+
+        addon.activate();
+
+        return AdminAddonResponseDto.from(addon);
+    }
+
+    // 관리자용 추가상품 삭제
+    @Transactional
+    public void deleteAddon(Long addonId) {
+        Addon addon = findAddon(addonId);
+
+        // 삭제 추가상품이 담긴 모든 장바구니 항목 정리
+        cartItemRepository.deleteByAddon(addon);
+
+        // 추가상품 소프트 삭제
+        addon.delete();
     }
 
     // 추가상품 재고 차감
@@ -90,6 +113,15 @@ public class AddonService {
         addon.decreaseStock(quantity);
     }
 
+    // 추가상품 재고 검증
+    public void validateStock(Long addonId, int quantity) {
+        Addon addon = getActiveAddon(addonId);
+
+        if (addon.getStockQuantity() < quantity) {
+            throw new BusinessException(ErrorCode.OUT_OF_STOCK);
+        }
+    }
+
     // 추가상품 재고 복구
     @Transactional
     public void increaseStock(Long addonId, int quantity) {
@@ -100,7 +132,7 @@ public class AddonService {
 
     // 활성 추가상품 조회
     public Addon getActiveAddon(Long addonId) {
-        return addonRepository.findByIdAndActiveTrue(addonId)
+        return addonRepository.findByIdAndActiveTrueAndDeletedFalse(addonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
     }
 

@@ -33,7 +33,10 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/admin/auth/**").permitAll()
-                        .requestMatchers("/api/member/auth/**").permitAll()
+                        .requestMatchers("/api/member/auth/signup").permitAll()
+                        .requestMatchers("/api/member/auth/login").permitAll()
+                        .requestMatchers("/api/member/auth/refresh").permitAll()
+                        .requestMatchers("/api/member/auth/logout").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/member/**").hasRole("MEMBER")
                         .requestMatchers("/api/cart/**").hasRole("MEMBER")
