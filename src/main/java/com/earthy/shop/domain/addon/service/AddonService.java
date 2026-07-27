@@ -11,6 +11,7 @@ import com.earthy.shop.domain.addon.dto.response.AdminAddonResponseDto;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.repository.AddonRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class AddonService {
 
@@ -111,6 +113,10 @@ public class AddonService {
 
         // 추가상품 재고 차감
         addon.decreaseStock(quantity);
+
+        log.info("[ADDON STOCK DECREASED] addonId={} | quantity={}",
+                addonId,
+                quantity);
     }
 
     // 추가상품 재고 검증
@@ -128,6 +134,10 @@ public class AddonService {
         Addon addon = findAddon(addonId);
 
         addon.increaseStock(quantity);
+
+        log.info("[ADDON STOCK RESTORED] addonId={} | quantity={}",
+                addonId,
+                quantity);
     }
 
     // 활성 추가상품 조회

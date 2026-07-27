@@ -22,4 +22,13 @@ public class MemberUpdateRequestDto {
             message = "전화번호 형식은 010-0000-0000 이어야 합니다."
     )
     private String phone;
+
+    // 회원 우편번호
+    private String zipCode;
+
+    // 회원 기본주소
+    private String address;
+
+    // 회원 상세주소
+    private String detailAddress;
 }

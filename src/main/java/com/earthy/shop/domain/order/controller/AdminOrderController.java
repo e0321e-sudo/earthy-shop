@@ -5,6 +5,7 @@ import com.earthy.shop.common.response.PageResponseDto;
 import com.earthy.shop.domain.order.dto.request.OrderCancelRequestDto;
 import com.earthy.shop.domain.order.dto.request.OrderStatusUpdateRequestDto;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
+import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.order.service.OrderCancelService;
 import com.earthy.shop.domain.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -14,6 +15,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -29,6 +32,12 @@ public class AdminOrderController {
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         return ResponseEntity.ok(ApiResponseDto.success("관리자 주문 목록 조회 성공", orderService.getOrders(pageable)));
+    }
+
+    // 관리자 주문 상태별 개수 조회
+    @GetMapping("/status-counts")
+    public ResponseEntity<ApiResponseDto<Map<OrderStatus, Long>>> getOrderStatusCounts() {
+        return ResponseEntity.ok(ApiResponseDto.success("관리자 주문 상태별 개수 조회 성공", orderService.getOrderStatusCounts()));
     }
 
     // 관리자 주문 상세 조회

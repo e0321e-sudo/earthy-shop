@@ -15,14 +15,18 @@ import com.earthy.shop.domain.product.entity.Product;
 import com.earthy.shop.domain.product.enums.ProductCategory;
 import com.earthy.shop.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class ProductService {
 
@@ -58,6 +62,12 @@ public class ProductService {
         return ProductDetailResponseDto.of(product, addons);
     }
 
+    // 고객용 상품명 검색
+    public PageResponseDto<ProductResponseDto> searchProducts(String keyword, Pageable pageable) {
+        return PageResponseDto.from(productRepository.searchByName(keyword, pageable)
+                .map(ProductResponseDto::from));
+    }
+
     // 관리자용 상품 등록
     @Transactional
     public AdminProductResponseDto createProduct(ProductCreateRequestDto requestDto) {
@@ -66,6 +76,7 @@ public class ProductService {
                 requestDto.getCategory(),
                 requestDto.getPrice(),
                 requestDto.getImageUrl(),
+                requestDto.getDetailImageUrl(),
                 requestDto.getDescription(),
                 requestDto.getStockQuantity()
         );
@@ -92,6 +103,7 @@ public class ProductService {
                 requestDto.getCategory(),
                 requestDto.getPrice(),
                 requestDto.getImageUrl(),
+                requestDto.getDetailImageUrl(),
                 requestDto.getDescription(),
                 requestDto.getStockQuantity()
         );
@@ -139,6 +151,10 @@ public class ProductService {
 
         // 상품 재고 차감
         product.decreaseStock(quantity);
+
+        log.info("[PRODUCT STOCK DECREASED] productId={} | quantity={}",
+                productId,
+                quantity);
     }
 
     // 상품 재고 검증
@@ -156,6 +172,10 @@ public class ProductService {
         Product product = findProduct(productId);
 
         product.increaseStock(quantity);
+
+        log.info("[PRODUCT STOCK RESTORED] productId={} | quantity={}",
+                productId,
+                quantity);
     }
 
     // 활성 상품 조회

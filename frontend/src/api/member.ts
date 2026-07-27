@@ -4,6 +4,9 @@ import type { MemberResponse } from "./auth";
 export interface MemberUpdateRequest {
   name: string;
   phone: string;
+  zipCode: string;
+  address: string;
+  detailAddress: string;
 }
 
 export interface MemberPasswordUpdateRequest {

@@ -3,6 +3,7 @@ package com.earthy.shop.domain.payment.service;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.domain.addon.service.AddonService;
+import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent;
 import com.earthy.shop.domain.order.entity.Order;
 import com.earthy.shop.domain.order.entity.OrderItem;
 import com.earthy.shop.domain.order.service.OrderService;
@@ -17,11 +18,16 @@ import com.earthy.shop.domain.payment.enums.PaymentStatus;
 import com.earthy.shop.domain.payment.repository.PaymentRepository;
 import com.earthy.shop.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class PaymentService {
 
@@ -30,12 +36,21 @@ public class PaymentService {
     private final ProductService productService;
     private final AddonService addonService;
     private final TossPaymentClient tossPaymentClient;
+    private final ApplicationEventPublisher eventPublisher;
+
+    private static final DateTimeFormatter ORDER_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     // 결제 승인
     @Transactional
     public PaymentResponseDto confirmPayment(PaymentConfirmRequestDto requestDto) {
         // 주문 조회
         Order order = orderService.getOrder(requestDto.getOrderId());
+
+        log.info("[PAYMENT CONFIRM STARTED] orderId={} | orderNumber={} | amount={}",
+                order.getId(),
+                order.getOrderNumber(),
+                requestDto.getAmount());
 
         // 결제 완료 여부 검증
         if (paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE).isPresent()) {
@@ -101,7 +116,41 @@ public class PaymentService {
         // 결제 저장
         Payment savedPayment = paymentRepository.save(payment);
 
+        log.info("[PAYMENT CONFIRMED] orderId={} | orderNumber={} | paymentKey={} | amount={} | method={}",
+                order.getId(),
+                order.getOrderNumber(),
+                savedPayment.getPaymentKey(),
+                savedPayment.getAmount(),
+                savedPayment.getMethod());
+
+        // 주문 완료 알림 이벤트 발행
+        eventPublisher.publishEvent(new OrderCompletedNotificationEvent(
+                order.getReceiverPhone(),
+                order.getReceiverName(),
+                order.getCreatedAt().format(ORDER_DATE_FORMATTER),
+                order.getOrderNumber(),
+                createOrderProductName(order),
+                order.getTotalPrice()
+        ));
+
         return PaymentResponseDto.from(savedPayment);
+    }
+
+    // 주문 상품명 요약
+    private String createOrderProductName(Order order) {
+        String firstProductName = order.getOrderItems()
+                .stream()
+                .findFirst()
+                .map(OrderItem::getProductName)
+                .orElse("EARTHY 상품");
+
+        int extraItemCount = Math.max(order.getOrderItems().size() - 1, 0);
+
+        if (extraItemCount == 0) {
+            return firstProductName;
+        }
+
+        return firstProductName + " 외 " + extraItemCount + "개";
     }
 
     // 결제 취소
@@ -124,5 +173,10 @@ public class PaymentService {
 
         // 결제 취소 처리
         payment.cancel();
+
+        log.info("[PAYMENT CANCELED] orderId={} | orderNumber={} | paymentKey={}",
+                order.getId(),
+                order.getOrderNumber(),
+                payment.getPaymentKey());
     }
 }

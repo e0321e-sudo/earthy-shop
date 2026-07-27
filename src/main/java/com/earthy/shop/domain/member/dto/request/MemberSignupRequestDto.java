@@ -33,4 +33,13 @@ public class MemberSignupRequestDto {
             message = "전화번호 형식은 010-0000-0000 이어야 합니다."
     )
     private String phone;
+
+    // 이용약관 동의
+    private boolean termsAgreed;
+
+    // 개인정보 수집 및 이용 동의
+    private boolean privacyAgreed;
+
+    // 마케팅 정보 수신 동의
+    private boolean marketingAgreed;
 }

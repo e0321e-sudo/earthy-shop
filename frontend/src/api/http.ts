@@ -46,6 +46,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
   return body.data;
 }
 
+// 선택 인증 API 조회 전 토큰 갱신
+export async function refreshAuthIfPossible() {
+  if (!localStorage.getItem(REFRESH_TOKEN_KEY)) {
+    return null;
+  }
+
+  return refreshAccessToken();
+}
+
 // 액세스 토큰 포함 요청
 async function fetchWithAuth(path: string, options: RequestInit = {}) {
   const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);

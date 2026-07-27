@@ -14,6 +14,7 @@ public record ProductDetailResponseDto(
         String categoryDescription,
         int price,
         String imageUrl,
+        String detailImageUrl,
         String description,
         boolean soldOut,
         List<AddonResponseDto> addons
@@ -29,6 +30,7 @@ public record ProductDetailResponseDto(
                 product.getCategory().getDescription(),
                 product.getPrice(),
                 product.getImageUrl(),
+                product.getDetailImageUrl(),
                 product.getDescription(),
                 soldOut,
                 addons

@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.parameters.P;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -35,5 +36,14 @@ public class ProductController {
             @PathVariable Long productId
     ) {
         return ResponseEntity.ok(ApiResponseDto.success(productService.getProduct(productId)));
+    }
+
+    // 고객용 상품명 검색
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponseDto<PageResponseDto<ProductResponseDto>>> searchProducts(
+            @RequestParam String keyword,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success(productService.searchProducts(keyword, pageable)));
     }
 }

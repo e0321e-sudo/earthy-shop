@@ -28,6 +28,11 @@ export interface AdminLoginResponse {
 export type ProductCategory = "POSTCARD" | "POSTER" | "ETC";
 export type AddonType = "FRAME";
 export type OrderStatus = "PENDING" | "PAID" | "PREPARING" | "SHIPPED" | "DELIVERED" | "CANCELED";
+export type MemberStatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
+export type NoticeVisibilityFilter = "ALL" | "PUBLIC" | "PRIVATE";
+export type BoardType = "PRODUCT" | "DELIVERY" | "EXCHANGE_RETURN" | "CANCEL_CHANGE" | "PAYMENT" | "ETC";
+export type BoardVisibility = "PUBLIC" | "PRIVATE";
+export type BoardStatus = "WAITING" | "ANSWERED";
 
 export interface AdminProduct {
   id: number;
@@ -36,6 +41,7 @@ export interface AdminProduct {
   categoryDescription: string;
   price: number;
   imageUrl: string;
+  detailImageUrl: string | null;
   description: string;
   stockQuantity: number;
   active: boolean;
@@ -48,6 +54,7 @@ export interface ProductSaveRequest {
   category: ProductCategory;
   price: number;
   imageUrl: string;
+  detailImageUrl: string;
   description: string;
   stockQuantity: number;
 }
@@ -105,6 +112,50 @@ export interface AdminOrder {
   createdAt: string;
   carrier: string | null;
   trackingNumber: string | null;
+}
+
+export interface AdminMember {
+  id: number;
+  email: string;
+  name: string;
+  phone: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Notice {
+  id: number;
+  title: string;
+  content: string;
+  visible: boolean;
+  visibleDescription: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoticeSaveRequest {
+  title: string;
+  content: string;
+}
+
+export interface AdminBoard {
+  id: number;
+  memberId: number;
+  type: BoardType;
+  typeDescription: string;
+  writerName: string;
+  writerEmail: string;
+  title: string;
+  content: string;
+  visibility: BoardVisibility;
+  visibilityDescription: string;
+  status: BoardStatus;
+  statusDescription: string;
+  answer: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 let refreshRequest: Promise<AdminLoginResponse> | null = null;
@@ -367,6 +418,10 @@ export function getAdminOrdersPage(page = 0, size = 20) {
   return adminRequest<PageResponse<AdminOrder>>(`/api/admin/orders?${createPageQuery(page, size)}`);
 }
 
+export function getAdminOrderStatusCounts() {
+  return adminRequest<Partial<Record<OrderStatus, number>>>("/api/admin/orders/status-counts");
+}
+
 export function getAdminOrder(orderId: number) {
   return adminRequest<AdminOrder>(`/api/admin/orders/${orderId}`);
 }
@@ -385,5 +440,92 @@ export function cancelAdminOrder(orderId: number, cancelReason = "") {
   return adminRequest<AdminOrder>(`/api/admin/orders/${orderId}/cancel`, {
     method: "PATCH",
     body: JSON.stringify({ cancelReason }),
+  });
+}
+
+export function getAdminMembersPage(status: MemberStatusFilter = "ALL", page = 0, size = 20) {
+  const params = new URLSearchParams(createPageQuery(page, size));
+
+  if (status !== "ALL") {
+    params.set("status", status);
+  }
+
+  return adminRequest<PageResponse<AdminMember>>(`/api/admin/members?${params.toString()}`);
+}
+
+export function getAdminMember(memberId: number) {
+  return adminRequest<AdminMember>(`/api/admin/members/${memberId}`);
+}
+
+function createNoticeQuery(keyword: string, visibility: NoticeVisibilityFilter, page: number, size: number) {
+  const params = new URLSearchParams(createPageQuery(page, size));
+
+  if (keyword.trim()) {
+    params.set("keyword", keyword.trim());
+  }
+
+  if (visibility !== "ALL") {
+    params.set("visibility", visibility);
+  }
+
+  return params.toString();
+}
+
+export function getAdminNoticesPage(keyword = "", visibility: NoticeVisibilityFilter = "ALL", page = 0, size = 20) {
+  return adminRequest<PageResponse<Notice>>(`/api/admin/notices?${createNoticeQuery(keyword, visibility, page, size)}`);
+}
+
+export function getAdminNotice(noticeId: number) {
+  return adminRequest<Notice>(`/api/admin/notices/${noticeId}`);
+}
+
+export function createAdminNotice(requestBody: NoticeSaveRequest) {
+  return adminRequest<Notice>("/api/admin/notices", {
+    method: "POST",
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function updateAdminNotice(noticeId: number, requestBody: NoticeSaveRequest) {
+  return adminRequest<Notice>(`/api/admin/notices/${noticeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function hideAdminNotice(noticeId: number) {
+  return adminRequest<Notice>(`/api/admin/notices/${noticeId}/hide`, {
+    method: "PATCH",
+  });
+}
+
+export function showAdminNotice(noticeId: number) {
+  return adminRequest<Notice>(`/api/admin/notices/${noticeId}/show`, {
+    method: "PATCH",
+  });
+}
+
+function createBoardQuery(keyword: string, page: number, size: number) {
+  const params = new URLSearchParams(createPageQuery(page, size));
+
+  if (keyword.trim()) {
+    params.set("keyword", keyword.trim());
+  }
+
+  return params.toString();
+}
+
+export function getAdminBoardsPage(keyword = "", page = 0, size = 20) {
+  return adminRequest<PageResponse<AdminBoard>>(`/api/admin/boards?${createBoardQuery(keyword, page, size)}`);
+}
+
+export function getAdminBoard(boardId: number) {
+  return adminRequest<AdminBoard>(`/api/admin/boards/${boardId}`);
+}
+
+export function answerAdminBoard(boardId: number, answer: string) {
+  return adminRequest<AdminBoard>(`/api/admin/boards/${boardId}/answer`, {
+    method: "PATCH",
+    body: JSON.stringify({ answer }),
   });
 }

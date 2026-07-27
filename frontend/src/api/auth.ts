@@ -1,10 +1,15 @@
 import { request } from "./http";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+
 export interface SignupRequest {
   email: string;
   password: string;
   name: string;
   phone: string;
+  termsAgreed: boolean;
+  privacyAgreed: boolean;
+  marketingAgreed: boolean;
 }
 
 export interface LoginRequest {
@@ -17,6 +22,10 @@ export interface MemberResponse {
   email: string;
   name: string;
   phone: string;
+  zipCode: string | null;
+  address: string | null;
+  detailAddress: string | null;
+  provider: "LOCAL" | "KAKAO" | "NAVER";
   role: "MEMBER" | "ADMIN";
   active: boolean;
   createdAt: string;
@@ -58,4 +67,8 @@ export function refreshToken(refreshTokenValue: string): Promise<LoginResponse> 
       refreshToken: refreshTokenValue,
     }),
   });
+}
+
+export function getKakaoLoginUrl() {
+  return `${API_BASE_URL}/api/oauth/kakao`;
 }

@@ -7,7 +7,7 @@ public class DeliveryFeeCalculator {
 
     private static final int FREE_DELIVERY_MIN_AMOUNT = 30000;
     private static final int BASE_DELIVERY_FEE = 2500;
-    private static final int REMOTE_AREA_DELIVERY_FEE = 500;
+    private static final int REMOTE_AREA_DELIVERY_FEE = 2000;
 
     // 기본 배송비 계산
     public int calculateBaseDeliveryFee(int productTotalPrice) {

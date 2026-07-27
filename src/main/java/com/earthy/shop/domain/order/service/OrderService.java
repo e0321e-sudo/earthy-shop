@@ -9,6 +9,7 @@ import com.earthy.shop.domain.cart.service.CartService;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.member.service.MemberService;
 import com.earthy.shop.domain.addon.service.AddonService;
+import com.earthy.shop.domain.notification.event.ShippingStartedNotificationEvent;
 import com.earthy.shop.domain.order.dto.request.OrderCreateRequestDto;
 import com.earthy.shop.domain.order.dto.request.OrderStatusUpdateRequestDto;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
@@ -18,11 +19,15 @@ import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.order.repository.OrderRepository;
 import com.earthy.shop.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -33,6 +38,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class OrderService {
 
@@ -42,12 +48,22 @@ public class OrderService {
     private final DeliveryFeeCalculator deliveryFeeCalculator;
     private final ProductService productService;
     private final AddonService addonService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 주문 생성
     @Transactional
     public OrderResponseDto createOrder(String email, OrderCreateRequestDto requestDto) {
         // 요청 회원 조회
         Member member = memberService.getActiveMember(email);
+
+        // 첫 주문 회원 연락처 및 주소 등록
+        memberService.registerOrderContactIfBlank(
+                member,
+                requestDto.getReceiverPhone(),
+                requestDto.getZipCode(),
+                requestDto.getAddress(),
+                requestDto.getDetailAddress()
+        );
 
         // 장바구니 조회
         CartResponseDto cart = cartService.getCart(email);
@@ -117,8 +133,11 @@ public class OrderService {
         // 주문 저장
         Order savedOrder = orderRepository.save(order);
 
-        // 주문 완료 후 장바구니 정리
-        clearOrderedCartItems(email, requestDto.getCartItemIds());
+        log.info("[ORDER CREATED] orderId={} | orderNumber={} | memberId={} | totalPrice={}",
+                savedOrder.getId(),
+                savedOrder.getOrderNumber(),
+                member.getId(),
+                savedOrder.getTotalPrice());
 
         return OrderResponseDto.from(savedOrder);
     }
@@ -170,18 +189,6 @@ public class OrderService {
         addonQuantities.forEach(addonService::validateStock);
     }
 
-    // 주문 완료 후 장바구니 정리
-    private void clearOrderedCartItems(String email, List<Long> cartItemIds) {
-        // 전체상품주문 장바구니 전체 삭제
-        if (cartItemIds == null || cartItemIds.isEmpty()) {
-            cartService.clearCart(email);
-            return;
-        }
-
-        // 선택상품주문 장바구니 선택 삭제
-        cartService.deleteCartItems(email, cartItemIds);
-    }
-
     // 주문번호 생성
     private String createOrderNumber() {
         String date = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
@@ -195,7 +202,8 @@ public class OrderService {
         // 요청 회원 조회
         Member member = memberService.getActiveMember(email);
 
-        return PageResponseDto.from(orderRepository.findByMember(member, pageable)
+        // 결제 전 주문 제외 조회
+        return PageResponseDto.from(orderRepository.findByMemberAndStatusNot(member, OrderStatus.PENDING, pageable)
                 .map(OrderResponseDto::from));
     }
 
@@ -204,8 +212,8 @@ public class OrderService {
         // 요청 회원 조회
         Member member = memberService.getActiveMember(email);
 
-        // 회원 주문 조회
-        Order order = orderRepository.findByIdAndMember(orderId, member)
+        // 결제 전 주문 제외 단건 조회
+        Order order = orderRepository.findByIdAndMemberAndStatusNot(orderId, member, OrderStatus.PENDING)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         return OrderResponseDto.from(order);
@@ -221,8 +229,23 @@ public class OrderService {
 
     // 관리자 주문 목록 조회
     public PageResponseDto<OrderResponseDto> getOrders(Pageable pageable) {
-        return PageResponseDto.from(orderRepository.findAll(pageable)
+        return PageResponseDto.from(orderRepository.findByStatusNot(OrderStatus.PENDING, pageable)
                 .map(OrderResponseDto::from));
+    }
+
+    // 관리자 주문 상태별 개수 조회
+    public Map<OrderStatus, Long> getOrderStatusCounts() {
+        Map<OrderStatus, Long> counts = new HashMap<>();
+
+        for (OrderStatus status : OrderStatus.values()) {
+            if (status == OrderStatus.PENDING) {
+                continue;
+            }
+
+            counts.put(status, orderRepository.countByStatus(status));
+        }
+
+        return counts;
     }
 
     // 관리자 주문 상세 조회
@@ -243,6 +266,11 @@ public class OrderService {
     @Transactional
     public void payOrder(Order order, String paymentMethod) {
         order.pay(paymentMethod);
+
+        log.info("[ORDER PAID] orderId={} | orderNumber={} | paymentMethod={}",
+                order.getId(),
+                order.getOrderNumber(),
+                paymentMethod);
     }
 
     // 관리자 주문 상태 변경
@@ -250,6 +278,7 @@ public class OrderService {
     public OrderResponseDto updateOrderStatus(Long orderId, OrderStatusUpdateRequestDto requestDto) {
         // 주문 조회
         Order order = getOrder(orderId);
+        OrderStatus previousStatus = order.getStatus();
 
         // 배송 정보 등록
         if (requestDto.getStatus() == OrderStatus.SHIPPED) {
@@ -257,11 +286,39 @@ public class OrderService {
                     requestDto.getCarrier(),
                     requestDto.getTrackingNumber()
             );
+
+            log.info("[SHIPPING INFO SAVED] orderId={} | carrier={} | trackingNumber={}",
+                    order.getId(),
+                    order.getCarrier(),
+                    order.getTrackingNumber());
         }
 
         // 주문 상태 변경
         order.updateStatus(requestDto.getStatus());
 
+        log.info("[ORDER STATUS CHANGED] orderId={} | orderNumber={} | from={} | to={}",
+                order.getId(),
+                order.getOrderNumber(),
+                previousStatus,
+                order.getStatus());
+
+        // 상품 발송 알림 이벤트 발행
+        if (requestDto.getStatus() == OrderStatus.SHIPPED) {
+            eventPublisher.publishEvent(new ShippingStartedNotificationEvent(
+                    order.getReceiverPhone(),
+                    order.getReceiverName(),
+                    order.getCarrier(),
+                    order.getTrackingNumber(),
+                    createPostOfficeTrackingUrl(order.getTrackingNumber())
+            ));
+        }
+
         return OrderResponseDto.from(order);
+    }
+
+    // 우체국 배송조회 URL 생성
+    private String createPostOfficeTrackingUrl(String trackingNumber) {
+        return "https://service.epost.go.kr/trace.RetrieveDomRigiTraceList.comm?sid1="
+                + URLEncoder.encode(trackingNumber, StandardCharsets.UTF_8);
     }
 }

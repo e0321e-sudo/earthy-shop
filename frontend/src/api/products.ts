@@ -23,6 +23,16 @@ export function getProductsPage(category: ProductCategory, page = 0, size = 20):
   return request<PageResponse<Product>>(`/api/products?category=${category}&page=${page}&size=${size}`);
 }
 
+export function searchProductsPage(keyword: string, page = 0, size = 20): Promise<PageResponse<Product>> {
+  const params = new URLSearchParams({
+    keyword: keyword.trim(),
+    page: String(page),
+    size: String(size),
+  });
+
+  return request<PageResponse<Product>>(`/api/products/search?${params.toString()}`);
+}
+
 export function getProduct(productId: number): Promise<Product> {
   return request<Product>(`/api/products/${productId}`);
 }

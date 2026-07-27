@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import {
+  getKakaoLoginUrl,
   login,
   logout as requestLogout,
   signup,
@@ -32,8 +33,24 @@ import {
   type PageResponse as OrderPageResponse,
 } from "./api/orders";
 import { confirmPayment, type PaymentResponse } from "./api/payments";
-import { getProduct, getProductsPage, type PageResponse as ProductPageResponse } from "./api/products";
+import { getProduct, getProductsPage, searchProductsPage, type PageResponse as ProductPageResponse } from "./api/products";
+import { getNotice, getNoticesPage, type NoticeResponse } from "./api/notices";
+import { refreshAuthIfPossible } from "./api/http";
+import {
+  createBoard,
+  getBoardsPage,
+  getPrivateBoard,
+  getPublicBoard,
+  updateBoard,
+  type BoardListResponse,
+  type BoardResponse,
+  type BoardSaveRequest,
+  type BoardType,
+} from "./api/boards";
 import { requestTossPayment } from "./api/toss";
+import marketingConsentText from "./terms/marketing-consent.txt?raw";
+import privacyCollectionText from "./terms/privacy-collection.txt?raw";
+import serviceTermsText from "./terms/service-terms.txt?raw";
 import {
   categoryTabs,
   products as fallbackProducts,
@@ -45,7 +62,7 @@ import {
 const DAUM_POSTCODE_SCRIPT_URL = "//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
 const FREE_DELIVERY_MIN_AMOUNT = 30000;
 const BASE_DELIVERY_FEE = 2500;
-const REMOTE_AREA_DELIVERY_FEE = 500;
+const REMOTE_AREA_DELIVERY_FEE = 2000;
 const PHONE_PREFIXES = ["010", "011", "016", "017", "018", "019"];
 const DELIVERY_MEMO_OPTIONS = [
   "배송 전에 미리 연락바랍니다.",
@@ -55,6 +72,20 @@ const DELIVERY_MEMO_OPTIONS = [
   "택배함에 보관해 주세요.",
 ];
 const CUSTOM_DELIVERY_MEMO = "직접 입력";
+const BOARD_DEFAULT_CONTENT = `[고객상담 업무시간]
+평일 오전 10시 - 오후 5시 (점심시간 오후 12시 - 1시) / 주말, 공휴일 휴무
+*문의량이 많을 경우 당일 내 답변되지 못하고 1일 후 답변될 수 있습니다.
+
+`;
+const BOARD_PASSWORD_MASK = "****";
+const BOARD_TYPES: Array<{ value: BoardType; label: string }> = [
+  { value: "PRODUCT", label: "상품문의" },
+  { value: "DELIVERY", label: "배송문의" },
+  { value: "EXCHANGE_RETURN", label: "교환/반품문의" },
+  { value: "CANCEL_CHANGE", label: "배송 전 취소/변경" },
+  { value: "PAYMENT", label: "입금확인 문의" },
+  { value: "ETC", label: "기타문의" },
+];
 
 // 다음 우편번호 검색 응답
 interface DaumPostcodeData {
@@ -66,6 +97,7 @@ interface DaumPostcodeData {
 
 interface DaumPostcodeInstance {
   open: () => void;
+  embed: (element: HTMLElement) => void;
 }
 
 interface DaumPostcodeConstructor {
@@ -109,8 +141,9 @@ function loadDaumPostcodeScript(): Promise<void> {
   });
 }
 
-type Page = "home" | "shop" | "detail" | "about" | "cart" | "checkout" | "paymentResult" | "auth" | "mypage";
+type Page = "home" | "shop" | "search" | "detail" | "about" | "notice" | "board" | "cart" | "checkout" | "paymentResult" | "auth" | "mypage";
 type AuthMode = "login" | "signup";
+type AuthForm = Pick<SignupRequest, "email" | "password" | "name" | "phone">;
 type MyPageView = "home" | "orders" | "orderDetail" | "profile";
 type PaymentResultState =
   | { status: "processing"; message: string }
@@ -126,6 +159,9 @@ interface HeaderProps {
   onHome: () => void;
   onCategory: (category: ProductCategory) => void;
   onAbout: () => void;
+  onNotice: () => void;
+  onBoard: () => void;
+  onSearch: () => void;
   onAuth: () => void;
   onCart: () => void;
 }
@@ -140,11 +176,14 @@ interface ShopProps {
   onChangePage: (page: number) => void;
 }
 
+interface SearchPageProps {
+  onOpenDetail: (productId: number) => void;
+}
+
 interface ProductDetailProps {
   product: Product | null;
   loading: boolean;
   error: string | null;
-  onBack: () => void;
   onAddToCart: (requestBody: CartItemAddRequest) => Promise<void>;
   onBuyNow: (requestBody: CartItemAddRequest) => Promise<void>;
 }
@@ -188,7 +227,13 @@ interface MyPageProps {
   loading: boolean;
   error: string | null;
   onChangeOrderPage: (page: number) => void;
-  onUpdateInfo: (name: string, phone: string) => Promise<void>;
+  onUpdateInfo: (
+    name: string,
+    phone: string,
+    zipCode: string,
+    address: string,
+    detailAddress: string
+  ) => Promise<void>;
   onUpdatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onCancelOrder: (orderId: number, cancelReason: string) => Promise<void>;
   onDeactivate: () => Promise<void>;
@@ -201,6 +246,52 @@ interface AuthPageProps {
 
 // 금액 표기
 const formatWon = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+
+// 우체국 배송조회 새 창 열기
+const openPostOfficeTracking = (trackingNumber?: string | null) => {
+  if (!trackingNumber) {
+    window.alert("등록된 운송장 번호가 없습니다.");
+    return;
+  }
+
+  const trackingUrl = `https://service.epost.go.kr/trace.RetrieveDomRigiTraceList.comm?sid1=${encodeURIComponent(
+    trackingNumber
+  )}`;
+
+  window.open(trackingUrl, "_blank", "noopener,noreferrer");
+};
+
+// 일시 표기
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+
+// Q&A 목록 일자 표기
+const formatDateHyphen = (value: string) => {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+// 당일 작성 여부
+const isCreatedToday = (value: string) => {
+  const createdDate = new Date(value);
+  const today = new Date();
+
+  return (
+    createdDate.getFullYear() === today.getFullYear() &&
+    createdDate.getMonth() === today.getMonth() &&
+    createdDate.getDate() === today.getDate()
+  );
+};
 
 // 기본 배송비 계산
 const calculateDeliveryFee = (productTotalPrice: number) =>
@@ -294,11 +385,43 @@ function getStoredPaymentOrder(orderNumber: string | null): OrderResponse | unde
   }
 }
 
+// 결제 승인 후 정리할 장바구니 항목 저장
+function storePaymentCartItemIds(orderNumber: string, cartItemIds: number[]) {
+  sessionStorage.setItem(`earthyPaymentCartItems:${orderNumber}`, JSON.stringify(cartItemIds));
+}
+
+// 결제 승인 후 정리할 장바구니 항목 조회
+function getStoredPaymentCartItemIds(orderNumber: string | null): number[] {
+  if (!orderNumber) {
+    return [];
+  }
+
+  const storedCartItemIds = sessionStorage.getItem(`earthyPaymentCartItems:${orderNumber}`);
+
+  if (!storedCartItemIds) {
+    return [];
+  }
+
+  try {
+    const parsedCartItemIds = JSON.parse(storedCartItemIds);
+
+    if (!Array.isArray(parsedCartItemIds)) {
+      return [];
+    }
+
+    return parsedCartItemIds.filter((cartItemId): cartItemId is number => typeof cartItemId === "number");
+  } catch {
+    return [];
+  }
+}
+
 function App() {
   // 화면 전환 상태
   const [page, setPage] = useState<Page>("home");
   const [category, setCategory] = useState<ProductCategory>("ALL");
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [noticePageKey, setNoticePageKey] = useState(0);
+  const [boardPageKey, setBoardPageKey] = useState(0);
 
   // 장바구니 상태
   const [cartItems, setCartItems] = useState<CartItemResponse[]>([]);
@@ -344,6 +467,25 @@ function App() {
   useEffect(() => {
     setProductPage(0);
   }, [category]);
+
+  // 소셜 로그인 완료 토큰 저장
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthProvider = params.get("oauth");
+    const oauthAccessToken = params.get("accessToken");
+    const oauthRefreshToken = params.get("refreshToken");
+
+    if (oauthProvider !== "kakao" || !oauthAccessToken || !oauthRefreshToken) {
+      return;
+    }
+
+    localStorage.setItem("earthyAccessToken", oauthAccessToken);
+    localStorage.setItem("earthyRefreshToken", oauthRefreshToken);
+    setAccessToken(oauthAccessToken);
+    setPage("home");
+
+    window.history.replaceState({}, "", window.location.pathname);
+  }, []);
 
   // 리프레시 토큰 재발급 실패 시 로그인 상태 정리
   useEffect(() => {
@@ -486,6 +628,28 @@ function App() {
     }
   };
 
+  // 결제 성공 후 주문한 장바구니 항목 정리
+  const clearPaidCartItems = async (orderNumber: string) => {
+    const cartItemIds = getStoredPaymentCartItemIds(orderNumber);
+
+    if (cartItemIds.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      cartItemIds.map(async (cartItemId) => {
+        try {
+          await deleteCartItem(cartItemId);
+        } catch {
+          // 이미 삭제된 항목은 결제 완료 흐름을 막지 않음
+        }
+      })
+    );
+
+    sessionStorage.removeItem(`earthyPaymentCartItems:${orderNumber}`);
+    await loadCart();
+  };
+
   // 토스 결제 결과 콜백 처리
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -571,10 +735,10 @@ function App() {
           amount: confirmedAmount,
         });
 
+        await clearPaidCartItems(confirmedTossOrderNumber);
         sessionStorage.removeItem(`earthyPaymentOrder:${confirmedTossOrderNumber}`);
         sessionStorage.removeItem(`earthyPaymentOrderData:${confirmedTossOrderNumber}`);
-        setCartItems([]);
-        await Promise.all([loadCart(), loadMyPage()]);
+        await loadMyPage();
         setPaymentResult({
           status: "success",
           message: "결제가 완료되었습니다.",
@@ -643,6 +807,28 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // 공지사항 화면 이동
+  const openNotice = () => {
+    setNoticePageKey((key) => key + 1);
+    setPage("notice");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // 게시판 화면 이동
+  const openBoard = () => {
+    setBoardPageKey((key) => key + 1);
+    setPage("board");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // 상품 검색 화면 이동
+  const openSearch = () => {
+    setPage("search");
+    setSelectedProductId(null);
+    setProductDetail(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   // 로그인 필요 화면 진입 검증
   const requireLogin = () => {
     if (accessToken) {
@@ -706,6 +892,10 @@ function App() {
       ...requestBody,
       cartItemIds: checkoutCartItemIds,
     });
+
+    const orderedCartItemIds = checkoutCartItemIds ?? cartItems.map((item) => item.cartItemId);
+    storePaymentCartItemIds(order.orderNumber, orderedCartItemIds);
+
     return order;
   };
 
@@ -746,8 +936,14 @@ function App() {
   };
 
   // 회원 정보 수정
-  const saveMyInfo = async (name: string, phone: string) => {
-    const updatedMember = await updateMyInfo({ name, phone });
+  const saveMyInfo = async (
+    name: string,
+    phone: string,
+    zipCode: string,
+    address: string,
+    detailAddress: string
+  ) => {
+    const updatedMember = await updateMyInfo({ name, phone, zipCode, address, detailAddress });
     setMember(updatedMember);
   };
 
@@ -805,6 +1001,9 @@ function App() {
         onHome={goHome}
         onCategory={openCategory}
         onAbout={() => setPage("about")}
+        onNotice={openNotice}
+        onBoard={openBoard}
+        onSearch={openSearch}
         onAuth={openAccount}
         onCart={openCart}
       />
@@ -822,17 +1021,25 @@ function App() {
             onChangePage={setProductPage}
           />
         )}
+        {page === "search" && <SearchPage onOpenDetail={openDetail} />}
         {page === "detail" && (
           <ProductDetail
             product={productDetail}
             loading={productDetailLoading}
             error={productDetailError}
-            onBack={() => openCategory(category)}
             onAddToCart={addToCart}
             onBuyNow={buyNow}
           />
         )}
         {page === "about" && <About />}
+        {page === "notice" && <NoticePage key={noticePageKey} />}
+        {page === "board" && (
+          <BoardPage
+            key={boardPageKey}
+            loggedIn={Boolean(accessToken)}
+            onRequireLogin={requireLogin}
+          />
+        )}
         {page === "cart" && (
           <Cart
             items={cartItems}
@@ -923,6 +1130,9 @@ function Header({
   onHome,
   onCategory,
   onAbout,
+  onNotice,
+  onBoard,
+  onSearch,
   onAuth,
   onCart,
 }: HeaderProps) {
@@ -940,6 +1150,21 @@ function Header({
 
   const handleAbout = () => {
     onAbout();
+    setMenuOpen(false);
+  };
+
+  const handleNotice = () => {
+    onNotice();
+    setMenuOpen(false);
+  };
+
+  const handleBoard = () => {
+    onBoard();
+    setMenuOpen(false);
+  };
+
+  const handleSearch = () => {
+    onSearch();
     setMenuOpen(false);
   };
 
@@ -1014,8 +1239,12 @@ function Header({
               {tab.label}
             </button>
           ))}
-          <button type="button">NOTICE</button>
-          <button type="button">BOARD</button>
+          <button className={page === "notice" ? "is-active" : ""} type="button" onClick={handleNotice}>
+            NOTICE
+          </button>
+          <button className={page === "board" ? "is-active" : ""} type="button" onClick={handleBoard}>
+            Q&A
+          </button>
         </div>
       </nav>
 
@@ -1024,7 +1253,7 @@ function Header({
       </button>
 
       <div className="header-actions">
-        <button className="icon-button" type="button" aria-label="검색" onClick={() => setMenuOpen(false)}>
+        <button className={`icon-button ${page === "search" ? "is-active" : ""}`} type="button" aria-label="검색" onClick={handleSearch}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
             <path d="m16.5 16.5 4 4" />
@@ -1093,6 +1322,535 @@ function Home({ onHome }: { onHome: () => void }) {
   );
 }
 
+function NoticePage() {
+  const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [notices, setNotices] = useState<NoticeResponse[]>([]);
+  const [pageInfo, setPageInfo] = useState<ProductPageResponse<NoticeResponse>>(() => createEmptyPage<NoticeResponse>());
+  const [currentPage, setCurrentPage] = useState(0);
+  const [selectedNotice, setSelectedNotice] = useState<NoticeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadNotices(page = currentPage) {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getNoticesPage(appliedKeyword, page);
+      setNotices(data.content);
+      setPageInfo(data);
+      setCurrentPage(data.page);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "공지사항을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openNoticeDetail(noticeId: number) {
+    setError("");
+
+    try {
+      setSelectedNotice(await getNotice(noticeId));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "공지사항 상세를 불러오지 못했습니다.");
+    }
+  }
+
+  useEffect(() => {
+    void loadNotices();
+  }, [appliedKeyword, currentPage]);
+
+  if (selectedNotice) {
+    return (
+      <section className="page-view board-view">
+        <div className="subpage-title-row board-list-title-row">
+          <p>NOTICE</p>
+        </div>
+        <article className="community-detail">
+          <header>
+            <h2>{selectedNotice.title}</h2>
+            <time>{formatDate(selectedNotice.createdAt)}</time>
+          </header>
+          <p>{selectedNotice.content}</p>
+        </article>
+      </section>
+    );
+  }
+
+  return (
+    <section className="page-view board-view">
+      <div className="subpage-title-row board-list-title-row">
+        <p>NOTICE</p>
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      <div className="qa-board-list notice-board-list">
+        <div className="qa-board-header notice-board-header" aria-hidden="true">
+          <span>NO</span>
+          <span>TITLE</span>
+          <span>DATE</span>
+        </div>
+        {loading ? (
+          <p className="empty-message">공지사항을 불러오는 중입니다.</p>
+        ) : notices.length === 0 ? (
+          <p className="empty-message">해당하는 공지사항이 없습니다.</p>
+        ) : (
+          notices.map((notice, index) => (
+            <div className="qa-board-row notice-board-row" key={notice.id}>
+              <span>{pageInfo.page * pageInfo.size + index + 1}</span>
+              <strong>
+                <button className="qa-title-button" type="button" onClick={() => void openNoticeDetail(notice.id)}>
+                  <span>{notice.title}</span>
+                </button>
+              </strong>
+              <time>{formatDateHyphen(notice.createdAt)}</time>
+            </div>
+          ))
+        )}
+      </div>
+      <Pagination pageInfo={pageInfo} onChangePage={setCurrentPage} />
+      <form
+        className="qa-board-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setCurrentPage(0);
+          setAppliedKeyword(keyword);
+        }}
+      >
+        <select aria-label="검색 조건" defaultValue="all">
+          <option value="all">전체</option>
+          <option value="title">제목</option>
+          <option value="content">내용</option>
+        </select>
+        <input
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              setCurrentPage(0);
+              setAppliedKeyword(keyword);
+            }
+          }}
+          aria-label="검색어"
+        />
+        <button type="submit">SEARCH</button>
+      </form>
+    </section>
+  );
+}
+
+function BoardPage({
+  loggedIn,
+  onRequireLogin,
+}: {
+  loggedIn: boolean;
+  onRequireLogin: () => boolean;
+}) {
+  const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [boards, setBoards] = useState<BoardListResponse[]>([]);
+  const [pageInfo, setPageInfo] = useState<ProductPageResponse<BoardListResponse>>(() => createEmptyPage<BoardListResponse>());
+  const [currentPage, setCurrentPage] = useState(0);
+  const [selectedBoard, setSelectedBoard] = useState<BoardResponse | null>(null);
+  const [privateTarget, setPrivateTarget] = useState<BoardListResponse | null>(null);
+  const [privatePassword, setPrivatePassword] = useState("");
+  const [privateError, setPrivateError] = useState("");
+  const [mode, setMode] = useState<"list" | "detail" | "form">("list");
+  const [editingBoard, setEditingBoard] = useState<BoardResponse | null>(null);
+  const [form, setForm] = useState<BoardSaveRequest>({
+    type: "PRODUCT",
+    title: "문의합니다.",
+    content: BOARD_DEFAULT_CONTENT,
+    visibility: "PUBLIC",
+    postPassword: "",
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const canEditSelectedBoard = Boolean(selectedBoard?.mine && !selectedBoard.answer);
+
+  async function loadBoards(page = currentPage) {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getBoardsPage(appliedKeyword, page);
+      setBoards(data.content);
+      setPageInfo(data);
+      setCurrentPage(data.page);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "게시글을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openBoardDetail(board: BoardListResponse) {
+    setError("");
+    setNotice("");
+
+    if (board.visibility === "PRIVATE") {
+      setPrivateTarget(board);
+      setPrivatePassword("");
+      setPrivateError("");
+      return;
+    }
+
+    try {
+      if (loggedIn) {
+        await refreshAuthIfPossible();
+      }
+
+      setSelectedBoard(await getPublicBoard(board.id));
+      setMode("detail");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "게시글 상세를 불러오지 못했습니다.");
+    }
+  }
+
+  async function submitPrivatePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!privateTarget) {
+      return;
+    }
+
+    setPrivateError("");
+
+    if (!privatePassword.trim()) {
+      setPrivateError("비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    try {
+      if (loggedIn) {
+        await refreshAuthIfPossible();
+      }
+
+      setSelectedBoard(await getPrivateBoard(privateTarget.id, privatePassword));
+      setPrivateTarget(null);
+      setMode("detail");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (loadError) {
+      setPrivateError(loadError instanceof Error ? loadError.message : "비밀번호를 확인해주세요.");
+    }
+  }
+
+  function openCreateForm() {
+    if (!onRequireLogin()) {
+      return;
+    }
+
+    setEditingBoard(null);
+    setForm({ type: "PRODUCT", title: "문의합니다.", content: BOARD_DEFAULT_CONTENT, visibility: "PUBLIC", postPassword: "" });
+    setMode("form");
+    setNotice("");
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openEditForm() {
+    if (!selectedBoard) {
+      return;
+    }
+
+    setEditingBoard(selectedBoard);
+    setForm({
+      type: selectedBoard.type,
+      title: selectedBoard.title,
+      content: selectedBoard.content,
+      visibility: selectedBoard.visibility,
+      postPassword: selectedBoard.visibility === "PRIVATE" ? BOARD_PASSWORD_MASK : "",
+    });
+    setMode("form");
+    setNotice("");
+    setError("");
+  }
+
+  async function submitBoardForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    try {
+      const postPassword =
+        form.visibility === "PRIVATE" && form.postPassword !== BOARD_PASSWORD_MASK
+          ? form.postPassword
+          : undefined;
+      const requestBody = {
+        ...form,
+        postPassword,
+      };
+
+      const savedBoard = editingBoard
+        ? await updateBoard(editingBoard.id, requestBody)
+        : await createBoard(requestBody);
+
+      setEditingBoard(null);
+      await loadBoards(currentPage);
+
+      if (editingBoard) {
+        setSelectedBoard(null);
+        setMode("list");
+        setNotice("");
+        return;
+      }
+
+      setSelectedBoard(savedBoard);
+      setMode("detail");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "게시글 저장에 실패했습니다.");
+    }
+  }
+
+  useEffect(() => {
+    void loadBoards();
+  }, [appliedKeyword, currentPage]);
+
+  if (mode === "form") {
+    return (
+      <section className="page-view board-view">
+        <div className="subpage-title-row board-list-title-row">
+          <p>Q&A</p>
+        </div>
+        <form className="community-form" onSubmit={submitBoardForm}>
+          <label>
+            문의종류
+            <select value={form.type} onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value as BoardType }))}>
+              {BOARD_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            제목
+            <input value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} required />
+          </label>
+          <label>
+            내용
+            <textarea value={form.content} onChange={(event) => setForm((prev) => ({ ...prev, content: event.target.value }))} required rows={8} />
+          </label>
+          <div className="board-visibility-options">
+            <label>
+              <input
+                type="radio"
+                name="boardVisibility"
+                value="PUBLIC"
+                checked={form.visibility === "PUBLIC"}
+                onChange={() => setForm((prev) => ({ ...prev, visibility: "PUBLIC" }))}
+              />
+              공개글
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="boardVisibility"
+                value="PRIVATE"
+                checked={form.visibility === "PRIVATE"}
+                onChange={() => setForm((prev) => ({ ...prev, visibility: "PRIVATE" }))}
+              />
+              비밀글
+            </label>
+          </div>
+          {form.visibility === "PRIVATE" && (
+            <label>
+              비밀번호
+              <input
+                type="password"
+                minLength={4}
+                maxLength={20}
+                value={form.postPassword ?? ""}
+                onFocus={() => {
+                  if (form.postPassword === BOARD_PASSWORD_MASK) {
+                    setForm((prev) => ({ ...prev, postPassword: "" }));
+                  }
+                }}
+                onChange={(event) => setForm((prev) => ({ ...prev, postPassword: event.target.value }))}
+                placeholder="4자 이상 20자 이하"
+                required={!editingBoard || editingBoard.visibility === "PUBLIC"}
+              />
+            </label>
+          )}
+          {error && <p className="form-error">{error}</p>}
+          <div className="community-form-actions">
+            <button className="is-primary" type="submit">{editingBoard ? "수정" : "등록"}</button>
+            <button type="button" onClick={() => setMode(editingBoard ? "detail" : "list")}>
+              취소
+            </button>
+          </div>
+        </form>
+      </section>
+    );
+  }
+
+  if (mode === "detail" && selectedBoard) {
+    return (
+      <section className="page-view board-view">
+        <div className="subpage-title-row board-list-title-row">
+          <p>Q&A</p>
+        </div>
+        {notice && <p className="form-message">{notice}</p>}
+        <article className="community-detail">
+          <header>
+            <p>{selectedBoard.typeDescription}</p>
+            <h2>{selectedBoard.title}</h2>
+            <time>{selectedBoard.writerName} / {formatDate(selectedBoard.createdAt)}</time>
+          </header>
+          <p>{selectedBoard.content}</p>
+          {selectedBoard.answer && (
+            <div className="board-answer">
+              <strong>EARTHY 답변</strong>
+              <time>{selectedBoard.answeredAt ? formatDate(selectedBoard.answeredAt) : ""}</time>
+              <p>{selectedBoard.answer}</p>
+            </div>
+          )}
+          {loggedIn && canEditSelectedBoard && (
+            <div className="community-actions">
+              <button type="button" onClick={openEditForm}>
+                수정하기
+              </button>
+            </div>
+          )}
+        </article>
+      </section>
+    );
+  }
+
+  let nextQaDisplayNo = pageInfo.page * pageInfo.size + 1;
+  const qaRows = boards.flatMap((board) => {
+    const rows = [
+      {
+        board,
+        displayNo: nextQaDisplayNo,
+        answer: false,
+      },
+    ];
+    nextQaDisplayNo += 1;
+
+    if (board.answeredAt) {
+      rows.push({
+        board,
+        displayNo: nextQaDisplayNo,
+        answer: true,
+      });
+      nextQaDisplayNo += 1;
+    }
+
+    return rows;
+  });
+
+  return (
+    <section className="page-view board-view">
+      <div className="subpage-title-row board-list-title-row">
+        <p>Q&A</p>
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      <div className="qa-board-list">
+        <div className="qa-board-header" aria-hidden="true">
+          <span>NO</span>
+          <span>CATE</span>
+          <span>TITLE</span>
+          <span>NAME</span>
+          <span>DATE</span>
+        </div>
+        {loading ? (
+          <p className="empty-message">게시글을 불러오는 중입니다.</p>
+        ) : boards.length === 0 ? (
+          <p className="empty-message">해당하는 문의가 없습니다.</p>
+        ) : (
+          qaRows.map(({ board, displayNo, answer }) => (
+            <Fragment key={`${board.id}-${answer ? "answer" : "question"}`}>
+              <div className={`qa-board-row${answer ? " qa-answer-row" : ""}`}>
+                <span>{displayNo}</span>
+                <span>{answer ? "" : board.typeDescription}</span>
+                <strong>
+                  {answer && <em>↳ RE</em>}
+                  <button className="qa-title-button" type="button" onClick={() => void openBoardDetail(board)}>
+                    <span>{board.title}</span>
+                  </button>
+                  {board.visibility === "PRIVATE" && <i className="qa-lock-icon" aria-label="비공개" />}
+                  {((!answer && isCreatedToday(board.createdAt)) ||
+                    (answer && board.answeredAt && isCreatedToday(board.answeredAt))) && (
+                    <b className="qa-new-icon" aria-label="새 글">N</b>
+                  )}
+                </strong>
+                <span>{answer ? "" : board.writerName}</span>
+                <time>{formatDateHyphen(answer && board.answeredAt ? board.answeredAt : board.createdAt)}</time>
+              </div>
+            </Fragment>
+          ))
+        )}
+      </div>
+      <Pagination pageInfo={pageInfo} onChangePage={setCurrentPage} />
+      <div className="community-toolbar qa-board-toolbar">
+        {loggedIn && (
+          <button type="button" onClick={openCreateForm}>
+            WRITE
+          </button>
+        )}
+      </div>
+      <form
+        className="qa-board-search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setCurrentPage(0);
+          setAppliedKeyword(keyword);
+        }}
+      >
+        <select aria-label="검색 조건" defaultValue="all">
+          <option value="all">전체</option>
+          <option value="title">제목</option>
+          <option value="content">내용</option>
+          <option value="writer">작성자</option>
+        </select>
+        <input
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              setCurrentPage(0);
+              setAppliedKeyword(keyword);
+            }
+          }}
+          aria-label="검색어"
+        />
+        <button type="submit">SEARCH</button>
+      </form>
+
+      {privateTarget && (
+        <div className="cart-notice-backdrop" role="presentation" onClick={() => setPrivateTarget(null)}>
+          <form className="cart-notice private-board-modal" onSubmit={submitPrivatePassword} onClick={(event) => event.stopPropagation()}>
+            <p>비공개 게시글입니다.</p>
+            <input
+              type="password"
+              value={privatePassword}
+              onChange={(event) => setPrivatePassword(event.target.value)}
+              placeholder="게시글 비밀번호"
+              minLength={4}
+              autoFocus
+            />
+            {privateError && <span className="private-password-help">{privateError}</span>}
+            <div>
+              <button type="button" onClick={() => setPrivateTarget(null)}>
+                닫기
+              </button>
+              <button type="submit">확인</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Shop({ category, products, pageInfo, loading, error, onOpenDetail, onChangePage }: ShopProps) {
   const title = categoryTabs.find((tab) => tab.value === category)?.label ?? "ALL";
 
@@ -1105,23 +1863,131 @@ function Shop({ category, products, pageInfo, loading, error, onOpenDetail, onCh
 
       {loading && <p className="state-text">상품을 불러오는 중입니다.</p>}
       {error && <p className="state-text">백엔드 연결 전이라 임시 상품을 보여줍니다.</p>}
+      {!loading && !error && products.length === 0 && <p className="state-text">상품이 없습니다.</p>}
 
-      <div className="product-grid">
-        {products.map((product) => (
-          <button
-            className={`product-item ${product.soldOut ? "is-sold-out" : ""}`}
-            type="button"
-            key={product.id}
-            onClick={() => onOpenDetail(product.id)}
-          >
-            <img src={product.imageUrl} alt={product.name} />
-            <span>{product.categoryDescription}</span>
-            <strong>{product.name}</strong>
-            <small>{product.soldOut ? "SOLD OUT" : formatWon(product.price)}</small>
-          </button>
-        ))}
-      </div>
+      {products.length > 0 && (
+        <div className="product-grid">
+          {products.map((product) => (
+            <button
+              className={`product-item ${product.soldOut ? "is-sold-out" : ""}`}
+              type="button"
+              key={product.id}
+              onClick={() => onOpenDetail(product.id)}
+            >
+              <img src={product.imageUrl} alt={product.name} />
+              <strong>{product.name}</strong>
+              <small>{product.soldOut ? "SOLD OUT" : formatWon(product.price)}</small>
+            </button>
+          ))}
+        </div>
+      )}
       <Pagination pageInfo={pageInfo} onChangePage={onChangePage} />
+    </section>
+  );
+}
+
+function SearchPage({ onOpenDetail }: SearchPageProps) {
+  const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [pageInfo, setPageInfo] = useState<ProductPageResponse<Product>>(() => createEmptyPage<Product>());
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    const trimmedKeyword = appliedKeyword.trim();
+
+    if (!trimmedKeyword) {
+      setProducts([]);
+      setPageInfo(createEmptyPage<Product>());
+      setError(null);
+      return;
+    }
+
+    async function fetchSearchProducts() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await searchProductsPage(trimmedKeyword, page);
+
+        if (!ignore) {
+          setProducts(data.content);
+          setPageInfo(data);
+        }
+      } catch (searchError) {
+        if (!ignore) {
+          setProducts([]);
+          setPageInfo(createEmptyPage<Product>());
+          setError(searchError instanceof Error ? searchError.message : "상품 검색 실패");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchSearchProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, [appliedKeyword, page]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPage(0);
+    setAppliedKeyword(keyword.trim());
+  };
+
+  const hasSearched = appliedKeyword.trim().length > 0;
+
+  return (
+    <section className="page-view shop-view search-view">
+      <div className="page-title">
+        <span>SHOP</span>
+        <h1>SEARCH</h1>
+      </div>
+
+      <form className="product-search-form" onSubmit={submitSearch}>
+        <input
+          type="search"
+          value={keyword}
+          onChange={(event) => setKeyword(event.target.value)}
+          placeholder="상품명을 입력하세요"
+          aria-label="상품명 검색"
+        />
+        <button type="submit">SEARCH</button>
+      </form>
+
+      {loading && <p className="state-text">상품을 검색하는 중입니다.</p>}
+      {error && <p className="state-text">상품 검색 결과를 불러오지 못했습니다.</p>}
+      {!loading && !error && hasSearched && products.length === 0 && (
+        <p className="state-text">검색된 상품이 없습니다.</p>
+      )}
+
+      {products.length > 0 && (
+        <>
+          <div className="product-grid">
+            {products.map((product) => (
+              <button
+                className={`product-item ${product.soldOut ? "is-sold-out" : ""}`}
+                type="button"
+                key={product.id}
+                onClick={() => onOpenDetail(product.id)}
+              >
+                <img src={product.imageUrl} alt={product.name} />
+                <strong>{product.name}</strong>
+                <small>{product.soldOut ? "SOLD OUT" : formatWon(product.price)}</small>
+              </button>
+            ))}
+          </div>
+          <Pagination pageInfo={pageInfo} onChangePage={setPage} />
+        </>
+      )}
     </section>
   );
 }
@@ -1137,26 +2003,54 @@ function Pagination<T>({
     return null;
   }
 
+  const visiblePageCount = Math.min(pageInfo.totalPages, 5);
+  const firstVisiblePage = Math.min(
+    Math.max(pageInfo.page - Math.floor(visiblePageCount / 2), 0),
+    pageInfo.totalPages - visiblePageCount
+  );
+  const pages = Array.from({ length: visiblePageCount }, (_, index) => firstVisiblePage + index);
+
   return (
     <nav className="pagination" aria-label="페이지 이동">
-      <button type="button" disabled={pageInfo.first} onClick={() => onChangePage(pageInfo.page - 1)}>
-        이전
+      <button
+        className="pagination-arrow is-prev"
+        type="button"
+        aria-label="이전 페이지"
+        disabled={pageInfo.first}
+        onClick={() => onChangePage(pageInfo.page - 1)}
+      >
+        <span aria-hidden="true" />
       </button>
-      <span>
-        {pageInfo.page + 1} / {pageInfo.totalPages}
-      </span>
-      <button type="button" disabled={pageInfo.last} onClick={() => onChangePage(pageInfo.page + 1)}>
-        다음
+      {pages.map((page) => (
+        <button
+          className={`pagination-page${pageInfo.page === page ? " active" : ""}`}
+          type="button"
+          key={page}
+          aria-current={pageInfo.page === page ? "page" : undefined}
+          onClick={() => onChangePage(page)}
+        >
+          {page + 1}
+        </button>
+      ))}
+      <button
+        className="pagination-arrow is-next"
+        type="button"
+        aria-label="다음 페이지"
+        disabled={pageInfo.last}
+        onClick={() => onChangePage(pageInfo.page + 1)}
+      >
+        <span aria-hidden="true" />
       </button>
     </nav>
   );
 }
 
+const DEFAULT_PRODUCT_DETAIL_IMAGE_URL = "/assets/products/details/postcard-detail.jpeg";
+
 function ProductDetail({
   product,
   loading,
   error,
-  onBack,
   onAddToCart,
   onBuyNow,
 }: ProductDetailProps) {
@@ -1183,9 +2077,6 @@ function ProductDetail({
   if (!product) {
     return (
       <section className="page-view detail-view">
-        <button className="text-button" type="button" onClick={onBack}>
-          목록
-        </button>
         <p className="state-text">{error ?? "상품을 찾을 수 없습니다."}</p>
       </section>
     );
@@ -1197,6 +2088,7 @@ function ProductDetail({
   const addonTotal = selectedAddon ? selectedAddon.price * addonQuantity : 0;
   const productTotal = product.price * quantity;
   const totalPrice = productTotal + addonTotal;
+  const detailImageUrl = product.detailImageUrl || DEFAULT_PRODUCT_DETAIL_IMAGE_URL;
 
   const createCartRequest = (): CartItemAddRequest => ({
       productId: product.id,
@@ -1236,15 +2128,10 @@ function ProductDetail({
 
   return (
     <section className="page-view detail-view">
-      <button className="text-button" type="button" onClick={onBack}>
-        목록
-      </button>
-
       <div className="detail-layout">
         <img className="detail-image" src={product.imageUrl} alt={product.name} />
 
         <article className="detail-panel">
-          <span>{product.categoryDescription}</span>
           <h1>{product.name}</h1>
           <p>{formatWon(product.price)}</p>
           <small>{product.description}</small>
@@ -1252,11 +2139,11 @@ function ProductDetail({
           <dl className="delivery-list">
             <div>
               <dt>배송비</dt>
-              <dd>3,000원 (30,000원 이상 구매 시 무료)</dd>
+              <dd>2,500원 (30,000원 이상 구매 시 무료)</dd>
             </div>
             <div>
               <dt>도서산간</dt>
-              <dd>제주 및 도서 산간 2,000원 추가</dd>
+              <dd>제주 및 도서산간 2,000원 추가</dd>
             </div>
           </dl>
 
@@ -1310,6 +2197,9 @@ function ProductDetail({
             </button>
           </div>
         </article>
+      </div>
+      <div className="product-detail-content">
+        <img src={detailImageUrl} alt={`${product.name} 상세 이미지`} />
       </div>
     </section>
   );
@@ -1591,6 +2481,7 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
   const [phoneMiddle, setPhoneMiddle] = useState("");
   const [phoneLast, setPhoneLast] = useState("");
   const [deliveryMemoType, setDeliveryMemoType] = useState("");
+  const [postcodeOpen, setPostcodeOpen] = useState(false);
 
   const remoteAreaDeliveryFee = calculateRemoteAreaDeliveryFee(form.zipCode, form.address);
   const paymentTotal = totalPrice + deliveryFee + remoteAreaDeliveryFee;
@@ -1601,6 +2492,9 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
     setForm((prevForm) => ({
       ...prevForm,
       receiverName: prevForm.receiverName || nextMember.name,
+      zipCode: prevForm.zipCode || nextMember.zipCode || "",
+      address: prevForm.address || nextMember.address || "",
+      detailAddress: prevForm.detailAddress || nextMember.detailAddress || "",
     }));
 
     const phoneParts = nextMember.phone.split("-");
@@ -1657,7 +2551,6 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
   useEffect(() => {
     if (member) {
       applyMemberContact(member);
-      return;
     }
 
     void getMyInfo()
@@ -1672,7 +2565,7 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
     void loadDaumPostcodeScript().catch(() => undefined);
   }, []);
 
-  // 우편번호 검색창 열기
+  // 우편번호 검색 모달 열기
   const openAddressSearch = async () => {
     setError(null);
 
@@ -1683,19 +2576,7 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
         throw new Error("우편번호 검색창을 사용할 수 없습니다.");
       }
 
-      new window.daum.Postcode({
-        oncomplete: (data) => {
-          setForm((prevForm) => ({
-            ...prevForm,
-            zipCode: data.zonecode,
-            address: data.roadAddress || data.jibunAddress || data.address,
-          }));
-
-          window.setTimeout(() => {
-            document.getElementById("checkout-detail-address")?.focus();
-          }, 0);
-        },
-      }).open();
+      setPostcodeOpen(true);
     } catch (addressError) {
       setError(addressError instanceof Error ? addressError.message : "우편번호 검색 실패");
     }
@@ -1719,9 +2600,9 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
       .catch(() => setTermsText("약관을 불러오지 못했습니다."));
   }, [termsOpen, termsText]);
 
-  // 약관 모달 오픈 시 배경 스크롤 잠금
+  // 모달 오픈 시 배경 스크롤 잠금
   useEffect(() => {
-    if (!termsOpen) {
+    if (!termsOpen && !postcodeOpen) {
       return;
     }
 
@@ -1735,7 +2616,7 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
-  }, [termsOpen]);
+  }, [termsOpen, postcodeOpen]);
 
   // 주문 생성 후 토스 결제창 이동
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1908,12 +2789,12 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
               </div>
               <div className="payment-terms-row">
                 <input
-                  aria-label="결제대행서비스 약관 동의"
+                  aria-label="전자금융거래 이용약관 동의"
                   checked={paymentTermsAgreed}
                   type="checkbox"
                   onChange={(event) => setPaymentTermsAgreed(event.target.checked)}
                 />
-                <span>[필수] 결제대행서비스 약관 동의</span>
+                <span>[필수] 전자금융거래 이용약관 동의</span>
                 <button type="button" onClick={() => setTermsOpen(true)}>
                   자세히
                 </button>
@@ -1937,21 +2818,81 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
           onClose={() => setTermsOpen(false)}
         />
       )}
+
+      {postcodeOpen && (
+        <PostcodeModal
+          onComplete={(data) => {
+            setForm((prevForm) => ({
+              ...prevForm,
+              zipCode: data.zonecode,
+              address: data.roadAddress || data.jibunAddress || data.address,
+            }));
+            setPostcodeOpen(false);
+
+            window.setTimeout(() => {
+              document.getElementById("checkout-detail-address")?.focus();
+            }, 0);
+          }}
+          onClose={() => setPostcodeOpen(false)}
+        />
+      )}
     </section>
   );
 }
 
+function PostcodeModal({
+  onComplete,
+  onClose,
+}: {
+  onComplete: (data: DaumPostcodeData) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const postcodeLayer = document.getElementById("checkout-postcode-layer");
+
+    if (!postcodeLayer || !window.daum?.Postcode) {
+      return;
+    }
+
+    postcodeLayer.innerHTML = "";
+
+    new window.daum.Postcode({
+      oncomplete: onComplete,
+    }).embed(postcodeLayer);
+
+    return () => {
+      postcodeLayer.innerHTML = "";
+    };
+  }, [onComplete]);
+
+  return (
+    <div className="postcode-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="postcode-modal-title">
+      <div className="postcode-modal">
+        <div className="postcode-modal-header">
+          <strong id="postcode-modal-title">우편번호 검색</strong>
+          <button type="button" onClick={onClose}>
+            닫기
+          </button>
+        </div>
+        <div id="checkout-postcode-layer" className="postcode-modal-content" />
+      </div>
+    </div>
+  );
+}
+
 function PaymentTermsModal({
+  title = "전자금융거래 이용약관",
   termsText,
   onClose,
 }: {
+  title?: string;
   termsText: string;
   onClose: () => void;
 }) {
   return (
     <div className="terms-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="payment-terms-title">
       <div className="terms-modal">
-        <h1 id="payment-terms-title">전자금융거래 이용약관</h1>
+        <h1 id="payment-terms-title">{title}</h1>
         <div className="terms-modal-content">
           <pre>{termsText || "약관을 불러오는 중입니다."}</pre>
         </div>
@@ -2052,7 +2993,13 @@ function MyPage({
   onDeactivate,
   onLogout,
 }: MyPageProps) {
-  const [infoForm, setInfoForm] = useState({ name: "", phone: "" });
+  const [infoForm, setInfoForm] = useState({
+    name: "",
+    phone: "",
+    zipCode: "",
+    address: "",
+    detailAddress: "",
+  });
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -2063,11 +3010,30 @@ function MyPage({
   const [view, setView] = useState<MyPageView>("home");
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [passwordChangeStep, setPasswordChangeStep] = useState<"newPassword" | "currentPassword" | null>(null);
+  const [passwordModalError, setPasswordModalError] = useState<string | null>(null);
+  const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+  const [profilePostcodeOpen, setProfilePostcodeOpen] = useState(false);
+  const isSocialOnlyMember =
+    (member?.provider === "KAKAO" || member?.provider === "NAVER") &&
+    member.email.endsWith("@earthy.local");
+  const passwordChangeDisabled = isSocialOnlyMember;
 
   useEffect(() => {
     if (member) {
-      setInfoForm({ name: member.name, phone: member.phone });
+      setInfoForm({
+        name: member.name,
+        phone: member.phone,
+        zipCode: member.zipCode || "",
+        address: member.address || "",
+        detailAddress: member.detailAddress || "",
+      });
+
+      if (member.provider === "KAKAO") {
+        setPasswordForm({ currentPassword: "", newPassword: "", newPasswordConfirm: "" });
+      }
     }
   }, [member]);
 
@@ -2081,6 +3047,30 @@ function MyPage({
           : numbers;
 
     setInfoForm((prevForm) => ({ ...prevForm, phone: formattedPhone }));
+  };
+
+  const updateInfoField = (field: keyof typeof infoForm, value: string) => {
+    setInfoForm((prevForm) => ({
+      ...prevForm,
+      [field]: value,
+    }));
+  };
+
+  // 마이페이지 우편번호 검색 모달 열기
+  const openProfileAddressSearch = async () => {
+    setActionError(null);
+
+    try {
+      await loadDaumPostcodeScript();
+
+      if (!window.daum?.Postcode) {
+        throw new Error("우편번호 검색창을 사용할 수 없습니다.");
+      }
+
+      setProfilePostcodeOpen(true);
+    } catch (addressError) {
+      setActionError(addressError instanceof Error ? addressError.message : "우편번호 검색 실패");
+    }
   };
 
   const orderCounts = orders.reduce(
@@ -2130,29 +3120,67 @@ function MyPage({
     setActionError(null);
 
     try {
-      await onUpdateInfo(infoForm.name, infoForm.phone);
-
-      const hasPasswordInput =
-        passwordForm.currentPassword || passwordForm.newPassword || passwordForm.newPasswordConfirm;
-
-      if (hasPasswordInput) {
-        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.newPasswordConfirm) {
-          setActionError("비밀번호를 변경하려면 현재 비밀번호와 새 비밀번호를 모두 입력해주세요.");
-          return;
-        }
-
-        if (passwordForm.newPassword !== passwordForm.newPasswordConfirm) {
-          setActionError("새 비밀번호가 일치하지 않습니다.");
-          return;
-        }
-
-        await onUpdatePassword(passwordForm.currentPassword, passwordForm.newPassword);
-        setPasswordForm({ currentPassword: "", newPassword: "", newPasswordConfirm: "" });
-      }
-
-      setMessage("회원 정보가 수정되었습니다.");
+      await onUpdateInfo(
+        infoForm.name,
+        infoForm.phone,
+        infoForm.zipCode,
+        infoForm.address,
+        infoForm.detailAddress
+      );
+      setToastMessage("회원 정보가 수정되었습니다.");
     } catch (updateError) {
       setActionError(updateError instanceof Error ? updateError.message : "회원 정보 수정 실패");
+    }
+  };
+
+  const openPasswordChange = () => {
+    if (passwordChangeDisabled) {
+      return;
+    }
+
+    setPasswordForm({ currentPassword: "", newPassword: "", newPasswordConfirm: "" });
+    setPasswordModalError(null);
+    setPasswordChangeStep("newPassword");
+  };
+
+  const closePasswordChange = () => {
+    setPasswordChangeStep(null);
+    setPasswordModalError(null);
+    setPasswordForm({ currentPassword: "", newPassword: "", newPasswordConfirm: "" });
+  };
+
+  const handlePasswordNext = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordModalError(null);
+
+    if (!passwordForm.newPassword || !passwordForm.newPasswordConfirm) {
+      setPasswordModalError("새 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.newPasswordConfirm) {
+      setPasswordModalError("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+
+    setPasswordChangeStep("currentPassword");
+  };
+
+  const handleUpdatePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordModalError(null);
+
+    if (!passwordForm.currentPassword) {
+      setPasswordModalError("현재 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    try {
+      await onUpdatePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      closePasswordChange();
+      setToastMessage("비밀번호가 변경되었습니다.");
+    } catch (updateError) {
+      setPasswordModalError(updateError instanceof Error ? updateError.message : "비밀번호 변경 실패");
     }
   };
 
@@ -2169,7 +3197,7 @@ function MyPage({
       }
 
       setCancelReasonOrderId(null);
-      setMessage("주문이 취소되었습니다.");
+      setToastMessage("주문이 취소되었습니다.");
     } catch (cancelError) {
       setActionError(cancelError instanceof Error ? cancelError.message : "주문 취소 실패");
     }
@@ -2191,6 +3219,7 @@ function MyPage({
 
     try {
       await onDeactivate();
+      setDeactivateConfirmOpen(false);
     } catch (deactivateError) {
       setActionError(deactivateError instanceof Error ? deactivateError.message : "회원 탈퇴 실패");
     }
@@ -2248,8 +3277,8 @@ function MyPage({
 
       {loading && <p className="state-text">마이페이지 정보를 불러오는 중입니다.</p>}
       {error && <p className="form-error">{error}</p>}
-      {view !== "profile" && message && <p className="form-message">{message}</p>}
       {view !== "profile" && actionError && <p className="form-error">{actionError}</p>}
+      <CustomerToast message={toastMessage} onClose={() => setToastMessage("")} />
 
       {view === "home" && (
         <div className="mypage-menu-grid">
@@ -2309,7 +3338,9 @@ function MyPage({
                         <button type="button" onClick={() => openOrderDetail(order)}>
                           상세보기
                         </button>
-                        <button type="button">배송조회</button>
+                        <button type="button" onClick={() => openPostOfficeTracking(order.trackingNumber)}>
+                          배송조회
+                        </button>
                       </div>
                     </div>
 
@@ -2483,6 +3514,7 @@ function MyPage({
               }
               autoFocus
             />
+            <small>취소 후에는 주문이 더 이상 진행되지 않습니다.</small>
             <div>
               <button type="button" onClick={() => void handleCancelOrder(cancelReasonOrderId)}>
                 취소하기
@@ -2503,49 +3535,10 @@ function MyPage({
               <input value={member?.email ?? ""} readOnly />
             </label>
             <label>
-              현재 비밀번호
-              <input
-                type="password"
-                value={passwordForm.currentPassword}
-                onChange={(event) =>
-                  setPasswordForm((prevForm) => ({
-                    ...prevForm,
-                    currentPassword: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              새 비밀번호
-              <input
-                type="password"
-                value={passwordForm.newPassword}
-                onChange={(event) =>
-                  setPasswordForm((prevForm) => ({
-                    ...prevForm,
-                    newPassword: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
-              새 비밀번호 확인
-              <input
-                type="password"
-                value={passwordForm.newPasswordConfirm}
-                onChange={(event) =>
-                  setPasswordForm((prevForm) => ({
-                    ...prevForm,
-                    newPasswordConfirm: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label>
               이름
               <input
                 value={infoForm.name}
-                onChange={(event) => setInfoForm((prevForm) => ({ ...prevForm, name: event.target.value }))}
+                onChange={(event) => updateInfoField("name", event.target.value)}
                 required
               />
             </label>
@@ -2560,19 +3553,192 @@ function MyPage({
                 required
               />
             </label>
+            <div className="profile-address-field">
+              <span>주소</span>
+              <div className="checkout-address-inputs">
+                <div className="checkout-address-search-row">
+                  <input
+                    value={infoForm.zipCode}
+                    placeholder="우편번호"
+                    readOnly
+                  />
+                  <button type="button" onClick={() => void openProfileAddressSearch()}>
+                    주소검색
+                  </button>
+                </div>
+                <input
+                  value={infoForm.address}
+                  placeholder="기본주소"
+                  readOnly
+                />
+                <input
+                  id="profile-detail-address"
+                  value={infoForm.detailAddress}
+                  placeholder="나머지 주소"
+                  onChange={(event) => updateInfoField("detailAddress", event.target.value)}
+                />
+              </div>
+            </div>
             {message && <p className="form-message profile-form-message">{message}</p>}
             {actionError && <p className="form-error profile-form-message">{actionError}</p>}
-            <button type="submit">수정하기</button>
+            <button className="profile-submit-button" type="submit">수정하기</button>
           </form>
 
           <div className="account-actions">
-            <button type="button" onClick={() => void handleDeactivate()}>
+            <button type="button" disabled={passwordChangeDisabled} onClick={openPasswordChange}>
+              비밀번호 변경
+            </button>
+            <button type="button" onClick={() => setDeactivateConfirmOpen(true)}>
               회원탈퇴
             </button>
           </div>
+
+          {deactivateConfirmOpen && (
+            <div className="cart-notice-backdrop" role="presentation" onClick={() => setDeactivateConfirmOpen(false)}>
+              <section
+                className="cart-notice deactivate-confirm-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="회원탈퇴 확인"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p>회원탈퇴를 진행하시겠습니까?</p>
+                <small>탈퇴 후에는 계정 이용이 제한됩니다.</small>
+                <div>
+                  <button type="button" onClick={() => setDeactivateConfirmOpen(false)}>
+                    취소
+                  </button>
+                  <button type="button" onClick={() => void handleDeactivate()}>
+                    탈퇴하기
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {passwordChangeStep === "newPassword" && (
+            <div className="cart-notice-backdrop" role="presentation" onClick={closePasswordChange}>
+              <form
+                className="cart-notice password-change-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="새 비밀번호 입력"
+                onClick={(event) => event.stopPropagation()}
+                onSubmit={handlePasswordNext}
+              >
+                <p>새 비밀번호를 입력해주세요.</p>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  placeholder="새 비밀번호"
+                  onChange={(event) =>
+                    setPasswordForm((prevForm) => ({
+                      ...prevForm,
+                      newPassword: event.target.value,
+                    }))
+                  }
+                  autoFocus
+                />
+                <input
+                  type="password"
+                  value={passwordForm.newPasswordConfirm}
+                  placeholder="새 비밀번호 확인"
+                  onChange={(event) =>
+                    setPasswordForm((prevForm) => ({
+                      ...prevForm,
+                      newPasswordConfirm: event.target.value,
+                    }))
+                  }
+                />
+                {passwordModalError && <span className="private-password-help">{passwordModalError}</span>}
+                <div>
+                  <button type="submit">변경하기</button>
+                  <button type="button" onClick={closePasswordChange}>
+                    닫기
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {passwordChangeStep === "currentPassword" && (
+            <div className="cart-notice-backdrop" role="presentation" onClick={closePasswordChange}>
+              <form
+                className="cart-notice password-change-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-label="현재 비밀번호 입력"
+                onClick={(event) => event.stopPropagation()}
+                onSubmit={(event) => void handleUpdatePassword(event)}
+              >
+                <p>현재 비밀번호를 입력해주세요.</p>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  placeholder="현재 비밀번호"
+                  onChange={(event) =>
+                    setPasswordForm((prevForm) => ({
+                      ...prevForm,
+                      currentPassword: event.target.value,
+                    }))
+                  }
+                  autoFocus
+                />
+                {passwordModalError && <span className="private-password-help">{passwordModalError}</span>}
+                <div>
+                  <button type="submit">변경하기</button>
+                  <button type="button" onClick={closePasswordChange}>
+                    닫기
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {profilePostcodeOpen && (
+            <PostcodeModal
+              onComplete={(data) => {
+                setInfoForm((prevForm) => ({
+                  ...prevForm,
+                  zipCode: data.zonecode,
+                  address: data.roadAddress || data.jibunAddress || data.address,
+                }));
+                setProfilePostcodeOpen(false);
+
+                window.setTimeout(() => {
+                  document.getElementById("profile-detail-address")?.focus();
+                }, 0);
+              }}
+              onClose={() => setProfilePostcodeOpen(false)}
+            />
+          )}
         </section>
       )}
     </section>
+  );
+}
+
+function CustomerToast({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    if (!message) {
+      return;
+    }
+
+    const timerId = window.setTimeout(onClose, 2200);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [message, onClose]);
+
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div className="customer-toast" role="status" aria-live="polite">
+      {message}
+    </div>
   );
 }
 
@@ -2589,7 +3755,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
       ? "EARTHY"
       : ""
   );
-  const [form, setForm] = useState<SignupRequest>({
+  const [form, setForm] = useState<AuthForm>({
     email: "",
     password: "",
     name: "",
@@ -2599,6 +3765,9 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [serviceTermsOpen, setServiceTermsOpen] = useState(false);
+  const [privacyTermsOpen, setPrivacyTermsOpen] = useState(false);
+  const [marketingTermsOpen, setMarketingTermsOpen] = useState(false);
   const [agreements, setAgreements] = useState({
     terms: false,
     privacy: false,
@@ -2607,7 +3776,24 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
 
   const allAgreed = agreements.terms && agreements.privacy && agreements.marketing;
 
-  const updateField = (field: keyof SignupRequest, value: string) => {
+  useEffect(() => {
+    if (!serviceTermsOpen && !privacyTermsOpen && !marketingTermsOpen) {
+      return;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [serviceTermsOpen, privacyTermsOpen, marketingTermsOpen]);
+
+  const updateField = (field: keyof AuthForm, value: string) => {
     setForm((prevForm) => ({
       ...prevForm,
       [field]: value,
@@ -2684,7 +3870,12 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
           return;
         }
 
-        await signup(form);
+        await signup({
+          ...form,
+          termsAgreed: agreements.terms,
+          privacyAgreed: agreements.privacy,
+          marketingAgreed: agreements.marketing,
+        });
         setCompletedMemberName(form.name.trim());
         setSignupCompleted(true);
         setMessage(null);
@@ -2819,7 +4010,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 <span>전체동의</span>
               </div>
 
-              <div className="agreement-row">
+              <div className="agreement-row agreement-row-with-detail">
                 <input
                   type="checkbox"
                   checked={agreements.terms}
@@ -2829,9 +4020,16 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 <span>
                   <strong>이용약관</strong> 동의 (필수)
                 </span>
+                <button
+                  className="agreement-detail-button"
+                  type="button"
+                  onClick={() => setServiceTermsOpen(true)}
+                >
+                  자세히
+                </button>
               </div>
 
-              <div className="agreement-row">
+              <div className="agreement-row agreement-row-with-detail">
                 <input
                   type="checkbox"
                   checked={agreements.privacy}
@@ -2841,9 +4039,16 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 <span>
                   <strong>개인정보 수집 및 이용</strong> 동의 (필수)
                 </span>
+                <button
+                  className="agreement-detail-button"
+                  type="button"
+                  onClick={() => setPrivacyTermsOpen(true)}
+                >
+                  자세히
+                </button>
               </div>
 
-              <div className="agreement-row">
+              <div className="agreement-row agreement-row-with-detail">
                 <input
                   type="checkbox"
                   checked={agreements.marketing}
@@ -2852,6 +4057,13 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
                 <span>
                   마케팅 정보 수신 동의 (선택)
                 </span>
+                <button
+                  className="agreement-detail-button"
+                  type="button"
+                  onClick={() => setMarketingTermsOpen(true)}
+                >
+                  자세히
+                </button>
               </div>
             </div>
           )}
@@ -2865,11 +4077,38 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
         </form>
 
         {mode === "login" && (
-          <button className="auth-switch-button" type="button" onClick={() => setMode("signup")}>
-            회원가입
-          </button>
+          <>
+            <button className="auth-switch-button" type="button" onClick={() => setMode("signup")}>
+              회원가입
+            </button>
+            <button className="kakao-login-button" type="button" onClick={() => window.location.href = getKakaoLoginUrl()}>
+              카카오 1초 로그인/회원가입
+            </button>
+          </>
         )}
       </div>
+
+      {serviceTermsOpen && (
+        <PaymentTermsModal
+          title="이용약관"
+          termsText={serviceTermsText}
+          onClose={() => setServiceTermsOpen(false)}
+        />
+      )}
+      {privacyTermsOpen && (
+        <PaymentTermsModal
+          title="개인정보 수집 및 이용 동의"
+          termsText={privacyCollectionText}
+          onClose={() => setPrivacyTermsOpen(false)}
+        />
+      )}
+      {marketingTermsOpen && (
+        <PaymentTermsModal
+          title="마케팅 정보 수신 동의"
+          termsText={marketingConsentText}
+          onClose={() => setMarketingTermsOpen(false)}
+        />
+      )}
     </section>
   );
 }
@@ -2900,10 +4139,9 @@ function BusinessFooter() {
   return (
     <footer className="business-footer">
       <p>
-        상호명: 얼씨 대표자: 한훈석, 박수지 사업장주소: 경남 창원시 소답동 148-3, 711호 연락처:
-        070-0000-0000 사업자등록번호: 000-00-00000
+        상호명: 얼씨 대표자: 한훈석 사업장주소: 경남 창원시 소답동 148-3, 711호 사업자등록번호: 877-05-02984
       </p>
-      <p>통신판매업신고번호: 제2026-경남창원-0000호 대표자 이메일: earthy@gmail.com</p>
+      <p>통신판매업신고번호: 제2026-경남창원-0000호 대표자 이메일: earthy9194@gmail.com</p>
     </footer>
   );
 }

@@ -36,6 +36,9 @@ public class Product extends BaseTimeEntity {
     @Column(nullable = false)
     private String imageUrl;
 
+    // 상품 상세 이미지 경로
+    private String detailImageUrl;
+
     // 상품 설명
     @Column(columnDefinition = "TEXT")
     private String description;
@@ -57,6 +60,7 @@ public class Product extends BaseTimeEntity {
             ProductCategory category,
             int price,
             String imageUrl,
+            String detailImageUrl,
             String description,
             int stockQuantity
     ) {
@@ -64,6 +68,7 @@ public class Product extends BaseTimeEntity {
         this.category = category;
         this.price = price;
         this.imageUrl = imageUrl;
+        this.detailImageUrl = detailImageUrl;
         this.description = description;
         this.stockQuantity = stockQuantity;
         this.active = true;
@@ -76,6 +81,7 @@ public class Product extends BaseTimeEntity {
             ProductCategory category,
             int price,
             String imageUrl,
+            String detailImageUrl,
             String description,
             int stockQuantity
     ) {
@@ -83,6 +89,7 @@ public class Product extends BaseTimeEntity {
         this.category = category;
         this.price = price;
         this.imageUrl = imageUrl;
+        this.detailImageUrl = detailImageUrl;
         this.description = description;
         this.stockQuantity = stockQuantity;
     }

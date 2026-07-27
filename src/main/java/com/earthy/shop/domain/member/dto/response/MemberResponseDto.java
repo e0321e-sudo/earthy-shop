@@ -1,5 +1,6 @@
 package com.earthy.shop.domain.member.dto.response;
 
+import com.earthy.shop.common.enums.LoginProvider;
 import com.earthy.shop.common.enums.UserRole;
 import com.earthy.shop.domain.member.entity.Member;
 
@@ -11,6 +12,10 @@ public record MemberResponseDto(
         String email,
         String name,
         String phone,
+        String zipCode,
+        String address,
+        String detailAddress,
+        LoginProvider provider,
         UserRole role,
         boolean active,
         LocalDateTime createdAt,
@@ -22,6 +27,10 @@ public record MemberResponseDto(
                 member.getEmail(),
                 member.getName(),
                 member.getPhone(),
+                member.getZipCode(),
+                member.getAddress(),
+                member.getDetailAddress(),
+                member.getProvider() == null ? LoginProvider.LOCAL : member.getProvider(),
                 member.getRole(),
                 member.isActive(),
                 member.getCreatedAt(),

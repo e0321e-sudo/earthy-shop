@@ -8,11 +8,13 @@ import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.payment.service.PaymentService;
 import com.earthy.shop.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class OrderCancelService {
 
@@ -65,6 +67,11 @@ public class OrderCancelService {
 
         // 주문 상태 취소 처리
         order.cancel();
+
+        log.info("[ORDER CANCELED] orderId={} | orderNumber={} | status={}",
+                order.getId(),
+                order.getOrderNumber(),
+                order.getStatus());
     }
 
     // 주문 상품 재고 복구

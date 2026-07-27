@@ -17,6 +17,7 @@ export interface Product {
   categoryDescription: string;
   price: number;
   imageUrl: string;
+  detailImageUrl?: string | null;
   description: string;
   soldOut: boolean;
   addons?: Addon[];
@@ -26,6 +27,8 @@ export interface CategoryTab {
   label: string;
   value: ProductCategory;
 }
+
+const detailImageUrl = "/assets/products/details/postcard-detail.jpeg";
 
 const imageItems: Array<[string, string, string]> = [
   ["sunset-sea", "sunset sea", "/assets/products/sunset-sea.jpeg"],
@@ -65,6 +68,7 @@ export const products: Product[] = [
     categoryDescription: "엽서",
     price: 3500,
     imageUrl,
+    detailImageUrl,
     description: "자연의 색과 온도를 작은 종이에 담은 엽서",
     soldOut: false,
   })),
@@ -75,6 +79,7 @@ export const products: Product[] = [
     categoryDescription: "포스터",
     price: 18000,
     imageUrl,
+    detailImageUrl,
     description: "방 안에 오래 걸어두기 좋은 자연 사진 포스터",
     soldOut: false,
     addons,

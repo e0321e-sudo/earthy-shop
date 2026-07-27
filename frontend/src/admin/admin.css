@@ -6,6 +6,14 @@
   color: #15130f;
 }
 
+.admin-shell button {
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.admin-shell button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
 .admin-mobile-header {
   display: none;
 }
@@ -116,6 +124,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  flex: 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
@@ -156,7 +165,7 @@
 
 .admin-summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -201,7 +210,7 @@ button.admin-metric-card:hover {
 }
 
 .admin-metric-card small {
-  color: #15130f;
+  color: #5f5a52;
   font-size: 12px;
 }
 
@@ -231,11 +240,31 @@ button.admin-metric-card:hover {
   font-size: 28px;
 }
 
+.admin-summary-card.is-alert {
+  border-color: #d01818;
+}
+
+.admin-summary-card.is-alert span,
+.admin-summary-card.is-alert strong {
+  color: #d01818;
+}
+
 .admin-two-column {
   display: grid;
   grid-template-columns: minmax(320px, 0.95fr) minmax(440px, 1.4fr);
   gap: 18px;
   align-items: start;
+}
+
+.admin-dashboard-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-dashboard-stock-card {
+  grid-column: 1 / -1;
 }
 
 .admin-card {
@@ -467,6 +496,10 @@ button.admin-metric-card:hover {
 }
 
 .admin-order-number-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -479,6 +512,19 @@ button.admin-metric-card:hover {
 
 .admin-order-number-button:hover {
   color: #356b38;
+}
+
+.admin-new-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #9d988f;
+  border-radius: 50%;
+  color: #15130f;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .admin-status-badge {
@@ -540,22 +586,39 @@ button.admin-metric-card:hover {
 }
 
 .admin-pagination button {
-  min-width: 64px;
-  height: 34px;
-  border: 1px solid #15130f;
+  min-width: 42px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
   background: transparent;
-  font-size: 12px;
-  font-weight: 500;
+  color: #15130f;
   cursor: pointer;
 }
 
+.admin-pagination button span {
+  display: block;
+  min-width: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+}
+
+.admin-pagination button.is-prev span {
+  transform: rotate(-135deg);
+}
+
+.admin-pagination button.is-next span {
+  transform: rotate(45deg);
+}
+
 .admin-pagination button:disabled {
-  border-color: #d9d4ca;
   color: #8b857a;
   cursor: not-allowed;
 }
 
-.admin-pagination span {
+.admin-pagination > span {
   min-width: 58px;
   text-align: center;
   font-size: 13px;
@@ -595,6 +658,46 @@ button.admin-metric-card:hover {
   resize: vertical;
 }
 
+.admin-page-form {
+  width: min(760px, 100%);
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 0;
+  background: transparent;
+}
+
+.admin-page-form h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.admin-page-form textarea {
+  min-height: 420px;
+  line-height: 1.7;
+}
+
+.admin-password-form {
+  width: 100%;
+  margin: 0;
+  padding-top: 10px;
+}
+
+.admin-password-form .admin-primary-button {
+  width: 100%;
+}
+
+.admin-management-form {
+  width: 100%;
+  margin: 0;
+  padding-top: 10px;
+}
+
+.admin-management-form .admin-button-row {
+  justify-self: stretch;
+}
+
 .admin-button-row,
 .admin-shipping-grid {
   display: grid;
@@ -609,6 +712,7 @@ button.admin-metric-card:hover {
   border: 1px solid #15130f;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
 }
 
 .admin-primary-button {
@@ -624,6 +728,11 @@ button.admin-metric-card:hover {
 .admin-primary-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.admin-primary-button:not(:disabled):active,
+.admin-outline-button:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 .admin-message {
@@ -665,6 +774,264 @@ button.admin-metric-card:hover {
 .admin-empty {
   margin: 0;
   color: #15130f;
+}
+
+.admin-empty-row {
+  height: 72px;
+  color: #15130f;
+  font-weight: 400;
+  text-align: center;
+}
+
+.admin-filter-row {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.admin-filter-row form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(100%, 420px);
+}
+
+.admin-filter-row label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.admin-filter-row input,
+.admin-filter-row select {
+  height: 38px;
+  border: 1px solid #d9d2c8;
+  background: #f8f6f1;
+  color: #15130f;
+  padding: 0 10px;
+  font: inherit;
+  font-weight: 400;
+}
+
+.admin-filter-row form input {
+  min-width: 260px;
+}
+
+.admin-list-top-filter {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: -12px;
+}
+
+.admin-list-top-filter select {
+  width: 92px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #15130f;
+  border-radius: 0;
+  background: transparent;
+  color: #15130f;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.admin-community-search {
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 18px auto 0;
+  margin-bottom: 0;
+}
+
+.admin-community-search form {
+  min-width: 0;
+  justify-content: center;
+  gap: 12px;
+}
+
+.admin-community-search input,
+.admin-community-search select,
+.admin-community-search .admin-outline-button {
+  height: 32px;
+  border: 1px solid #15130f;
+  border-radius: 0;
+  background: transparent;
+  color: #15130f;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.admin-community-search select {
+  width: 82px;
+  padding: 0 8px;
+}
+
+.admin-community-search form input {
+  width: 132px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.admin-community-search .admin-outline-button {
+  width: 82px;
+  min-height: 0;
+  padding: 0 12px;
+}
+
+.admin-community-search .admin-outline-button:active {
+  background: #15130f;
+  color: #fbfaf7;
+}
+
+.admin-community-table th {
+  text-align: center;
+}
+
+.admin-community-table td {
+  vertical-align: middle;
+}
+
+.admin-community-list-card {
+  border: 0;
+  background: transparent;
+}
+
+.admin-list-card.admin-community-list-card {
+  border: 0;
+}
+
+.admin-community-list-card .admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-community-list-card .admin-community-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.admin-community-list-card .admin-community-table th,
+.admin-community-list-card .admin-community-table td {
+  height: 49px;
+  padding: 0 18px;
+  border-right: 0;
+  border-bottom: 1px solid #d9d4ca;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: center;
+}
+
+.admin-list-card.admin-community-list-card .admin-community-table th,
+.admin-list-card.admin-community-list-card .admin-community-table td {
+  border-right: 0;
+}
+
+.admin-community-list-card .admin-community-table th {
+  height: 40px;
+  background: #f4f3f0;
+  color: #5f5a52;
+  font-size: 11px;
+}
+
+.admin-community-list-card .admin-community-table tbody tr {
+  cursor: default;
+}
+
+.admin-community-list-card .admin-community-table tbody tr:hover {
+  background: transparent;
+}
+
+.admin-community-list-card .admin-board-table td:first-child,
+.admin-community-list-card .admin-board-table th:first-child {
+  width: 150px;
+}
+
+.admin-community-list-card .admin-board-table td:nth-child(2),
+.admin-community-list-card .admin-board-table th:nth-child(2) {
+  width: auto;
+}
+
+.admin-community-list-card .admin-notice-table td:first-child,
+.admin-community-list-card .admin-notice-table th:first-child {
+  width: 38%;
+}
+
+.admin-community-list-card .admin-board-table td:nth-child(n + 3),
+.admin-community-list-card .admin-board-table th:nth-child(n + 3) {
+  width: 120px;
+}
+
+.admin-community-list-card .admin-notice-table td:nth-child(2),
+.admin-community-list-card .admin-notice-table th:nth-child(2) {
+  width: 100px;
+}
+
+.admin-community-list-card .admin-notice-table td:nth-child(3),
+.admin-community-list-card .admin-notice-table th:nth-child(3) {
+  width: 124px;
+}
+
+.admin-community-list-card .admin-notice-table td:nth-child(4),
+.admin-community-list-card .admin-notice-table th:nth-child(4) {
+  width: 176px;
+}
+
+.admin-community-list-card .admin-customer-table td:first-child,
+.admin-community-list-card .admin-customer-table th:first-child {
+  width: 34%;
+}
+
+.admin-community-list-card .admin-customer-table td:nth-child(2),
+.admin-community-list-card .admin-customer-table th:nth-child(2) {
+  width: 120px;
+}
+
+.admin-community-list-card .admin-customer-table td:nth-child(3),
+.admin-community-list-card .admin-customer-table th:nth-child(3) {
+  width: 150px;
+}
+
+.admin-community-list-card .admin-customer-table td:nth-child(4),
+.admin-community-list-card .admin-customer-table th:nth-child(4) {
+  width: 90px;
+}
+
+.admin-community-list-card .admin-customer-table td:nth-child(5),
+.admin-community-list-card .admin-customer-table th:nth-child(5) {
+  width: 120px;
+}
+
+.admin-community-list-card .admin-order-number-button {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.admin-community-list-card .admin-mini-actions {
+  flex-wrap: nowrap;
+}
+
+.admin-readable-modal {
+  max-width: min(920px, calc(100vw - 40px));
+}
+
+.admin-readable-modal p,
+.admin-readable-text {
+  margin: 0;
+  color: #15130f;
+  font-weight: 400;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.admin-readable-modal p {
+  max-height: 54vh;
+  overflow: auto;
+}
+
+.is-muted-row {
+  opacity: 0.58;
 }
 
 .admin-detail {
@@ -758,6 +1125,11 @@ button.admin-metric-card:hover {
   justify-content: flex-end;
 }
 
+.admin-detail-answer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .admin-detail-bottom-actions .admin-outline-button {
   min-width: 132px;
 }
@@ -802,6 +1174,14 @@ button.admin-metric-card:hover {
   font-weight: 600;
 }
 
+.admin-modal-warning {
+  margin: -4px 0 0;
+  color: #6c665b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 .admin-modal-card label {
   display: grid;
   gap: 8px;
@@ -825,6 +1205,15 @@ button.admin-metric-card:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.admin-member-modal-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.admin-member-modal-actions button {
+  min-width: 160px;
 }
 
 .admin-login-page {
@@ -853,6 +1242,11 @@ button.admin-metric-card:hover {
   max-width: 520px;
 }
 
+.admin-centered-form {
+  width: min(520px, 100%);
+  margin: 0 auto;
+}
+
 @media (max-width: 1100px) {
   .admin-summary-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -864,6 +1258,18 @@ button.admin-metric-card:hover {
 
   .admin-two-column {
     grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dashboard-spacer-card {
+    display: none;
+  }
+
+  .admin-dashboard-stock-card {
+    grid-column: auto;
   }
 
   .admin-order-action-grid {
@@ -971,6 +1377,10 @@ button.admin-metric-card:hover {
     flex: 0 0 auto;
   }
 
+  .admin-panel-header.has-action .admin-title-back-button {
+    margin-left: auto;
+  }
+
   .admin-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -990,6 +1400,7 @@ button.admin-metric-card:hover {
 
   .admin-product-table,
   .admin-addon-table,
+  .admin-community-table,
   .admin-product-table thead,
   .admin-product-table tbody,
   .admin-product-table tr,
@@ -999,30 +1410,39 @@ button.admin-metric-card:hover {
   .admin-addon-table tbody,
   .admin-addon-table tr,
   .admin-addon-table th,
-  .admin-addon-table td {
+  .admin-addon-table td,
+  .admin-community-table thead,
+  .admin-community-table tbody,
+  .admin-community-table tr,
+  .admin-community-table th,
+  .admin-community-table td {
     display: block;
     width: 100%;
     min-width: 0;
   }
 
   .admin-product-table,
-  .admin-addon-table {
+  .admin-addon-table,
+  .admin-community-table {
     min-width: 0;
   }
 
   .admin-product-table thead,
-  .admin-addon-table thead {
+  .admin-addon-table thead,
+  .admin-community-table thead {
     display: none;
   }
 
   .admin-product-table tr,
-  .admin-addon-table tr {
+  .admin-addon-table tr,
+  .admin-community-table tr {
     padding: 12px 0;
     border-bottom: 1px solid #15130f;
   }
 
   .admin-product-table td,
-  .admin-addon-table td {
+  .admin-addon-table td,
+  .admin-community-table td {
     display: grid;
     grid-template-columns: 82px minmax(0, 1fr);
     gap: 12px;
@@ -1033,7 +1453,8 @@ button.admin-metric-card:hover {
   }
 
   .admin-product-table td::before,
-  .admin-addon-table td::before {
+  .admin-addon-table td::before,
+  .admin-community-table td::before {
     color: #15130f;
     font-weight: 500;
   }
@@ -1074,10 +1495,79 @@ button.admin-metric-card:hover {
     content: "종류";
   }
 
+  .admin-community-table td:nth-child(1)::before {
+    content: "항목";
+  }
+
+  .admin-community-table td:nth-child(2)::before {
+    content: "내용";
+  }
+
+  .admin-community-table td:nth-child(3)::before {
+    content: "상태";
+  }
+
+  .admin-community-table td:nth-child(4)::before {
+    content: "일자";
+  }
+
+  .admin-community-table td:nth-child(5)::before {
+    content: "관리";
+  }
+
+  .admin-community-table td:nth-child(6)::before {
+    content: "작성일";
+  }
+
+  .admin-community-list-card .admin-community-table,
+  .admin-community-list-card .admin-community-table thead,
+  .admin-community-list-card .admin-community-table tbody,
+  .admin-community-list-card .admin-community-table tr {
+    display: table;
+    width: 100%;
+  }
+
+  .admin-community-list-card .admin-community-table {
+    min-width: 760px;
+  }
+
+  .admin-community-list-card .admin-community-table thead {
+    display: table-header-group;
+  }
+
+  .admin-community-list-card .admin-community-table tbody {
+    display: table-row-group;
+  }
+
+  .admin-community-list-card .admin-community-table tr {
+    display: table-row;
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .admin-community-list-card .admin-community-table th,
+  .admin-community-list-card .admin-community-table td {
+    display: table-cell;
+    width: auto;
+    min-width: 0;
+    padding: 0 18px;
+    border-bottom: 1px solid #d9d4ca;
+    text-align: center;
+  }
+
+  .admin-community-list-card .admin-community-table td::before {
+    content: none;
+  }
+
+  .admin-community-list-card .admin-community-table .admin-center-cell {
+    text-align: center;
+  }
+
   .admin-product-table .admin-center-cell,
   .admin-product-table .admin-price-cell,
   .admin-addon-table .admin-center-cell,
-  .admin-addon-table .admin-price-cell {
+  .admin-addon-table .admin-price-cell,
+  .admin-community-table .admin-center-cell {
     text-align: left;
   }
 
@@ -1087,6 +1577,14 @@ button.admin-metric-card:hover {
 
   .admin-mini-actions {
     justify-content: flex-start;
+  }
+
+  .admin-community-list-card .admin-community-table .admin-center-cell {
+    text-align: center;
+  }
+
+  .admin-community-list-card .admin-mini-actions {
+    justify-content: center;
   }
 
   .admin-desktop-order-list {
@@ -1170,6 +1668,31 @@ button.admin-metric-card:hover {
   .admin-button-row,
   .admin-shipping-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-filter-row,
+  .admin-filter-row form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-filter-row form input {
+    min-width: 0;
+  }
+
+  .admin-community-search,
+  .admin-community-search form {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .admin-community-search {
+    flex-wrap: wrap;
+  }
+
+  .admin-community-search form input {
+    width: 132px;
   }
 
   .admin-toast {
