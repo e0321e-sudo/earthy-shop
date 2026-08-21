@@ -1450,6 +1450,85 @@ main {
   transform: translateY(1px);
 }
 
+.auth-help-links {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.auth-help-links button {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-help-links button:active {
+  transform: translateY(1px);
+}
+
+.email-find-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(21, 19, 15, 0.28);
+}
+
+.email-find-modal {
+  display: grid;
+  gap: 14px;
+  width: min(390px, 100%);
+  padding: 34px 28px 28px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 18px 48px rgba(21, 19, 15, 0.18);
+  color: var(--ink);
+  text-align: center;
+}
+
+.email-find-modal p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.email-find-modal strong {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.email-find-modal div {
+  display: grid;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.email-find-modal button {
+  width: 160px;
+  min-height: 44px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.email-find-modal button:active {
+  transform: translateY(1px);
+}
+
 .logout-button {
   display: block;
   width: min(420px, 100%);
@@ -1883,11 +1962,12 @@ main {
 }
 
 .form-error {
-  color: #b3261e;
-  padding: 10px 12px;
-  border: 1px solid #e5a39c;
-  background: #fff1ef;
-  font-weight: 500;
+  color: #d13b2f;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
 }
 
 .profile-form-message {

@@ -1,21 +1,28 @@
 package com.earthy.shop.domain.member.service;
 
 import com.earthy.shop.common.config.JwtUtil;
+import com.earthy.shop.common.enums.LoginProvider;
 import com.earthy.shop.common.enums.UserRole;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.domain.member.dto.request.MemberEmailFindRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLoginRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLogoutRequestDto;
+import com.earthy.shop.domain.member.dto.request.MemberPasswordFindRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberTokenRefreshRequestDto;
+import com.earthy.shop.domain.member.dto.response.MemberEmailFindResponseDto;
 import com.earthy.shop.domain.member.dto.response.MemberLoginResponseDto;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.member.entity.RefreshToken;
 import com.earthy.shop.domain.member.repository.MemberRepository;
 import com.earthy.shop.domain.member.repository.RefreshTokenRepository;
+import com.earthy.shop.domain.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
 
 // 회원 인증 서비스
 @Service
@@ -23,10 +30,53 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class MemberAuthService {
 
+    private static final String TEMP_PASSWORD_CHARACTERS =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$";
+    private static final int TEMP_PASSWORD_LENGTH = 12;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final EmailService emailService;
+
+    // 이메일 찾기
+    public MemberEmailFindResponseDto findEmail(MemberEmailFindRequestDto requestDto) {
+        // 이름과 연락처 기준 회원 조회
+        Member member = memberRepository.findByNameAndPhoneAndActiveTrue(
+                requestDto.getName(),
+                requestDto.getPhone()
+        ).orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_EMAIL_NOT_FOUND));
+
+        return MemberEmailFindResponseDto.from(member);
+    }
+
+    // 비밀번호 찾기
+    @Transactional
+    public void findPassword(MemberPasswordFindRequestDto requestDto) {
+        // 이메일 기준 활성 회원 조회
+        Member member = memberRepository.findByEmailAndActiveTrue(requestDto.getEmail())
+                .orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_PASSWORD_FIND_NOT_FOUND));
+
+        // 소셜 로그인 회원 비밀번호 변경 방지
+        LoginProvider provider = member.getProvider() == null
+                ? LoginProvider.LOCAL
+                : member.getProvider();
+
+        if (provider != LoginProvider.LOCAL) {
+            throw new BusinessException(ErrorCode.SOCIAL_MEMBER_PASSWORD_UNSUPPORTED);
+        }
+
+        // 임시비밀번호 생성
+        String temporaryPassword = createTemporaryPassword();
+
+        // 임시비밀번호 암호화 저장
+        member.updatePassword(passwordEncoder.encode(temporaryPassword));
+
+        // 임시비밀번호 이메일 발송
+        emailService.sendTemporaryPassword(member.getEmail(), temporaryPassword);
+    }
 
     // 회원 로그인
     @Transactional
@@ -91,5 +141,17 @@ public class MemberAuthService {
         savedRefreshToken.updateToken(newRefreshToken);
 
         return new MemberLoginResponseDto(newAccessToken, newRefreshToken);
+    }
+
+    // 임시비밀번호 생성
+    private String createTemporaryPassword() {
+        StringBuilder temporaryPassword = new StringBuilder();
+
+        for (int i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+            int index = SECURE_RANDOM.nextInt(TEMP_PASSWORD_CHARACTERS.length());
+            temporaryPassword.append(TEMP_PASSWORD_CHARACTERS.charAt(index));
+        }
+
+        return temporaryPassword.toString();
     }
 }

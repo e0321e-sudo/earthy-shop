@@ -42,6 +42,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/auth/**").permitAll()
                         .requestMatchers("/api/member/auth/signup").permitAll()
                         .requestMatchers("/api/member/auth/login").permitAll()
+                        .requestMatchers("/api/member/auth/find-email").permitAll()
+                        .requestMatchers("/api/member/auth/find-password").permitAll()
                         .requestMatchers("/api/member/auth/refresh").permitAll()
                         .requestMatchers("/api/member/auth/logout").permitAll()
                         .requestMatchers("/api/oauth/**").permitAll()

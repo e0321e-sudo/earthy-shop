@@ -17,6 +17,15 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface EmailFindRequest {
+  name: string;
+  phone: string;
+}
+
+export interface PasswordFindRequest {
+  email: string;
+}
+
 export interface MemberResponse {
   id: number;
   email: string;
@@ -35,6 +44,12 @@ export interface MemberResponse {
 export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
+}
+
+export interface EmailFindResponse {
+  email: string;
+  provider: "LOCAL" | "KAKAO" | "NAVER";
+  providerDescription: string;
 }
 
 export function signup(requestBody: SignupRequest): Promise<MemberResponse> {
@@ -66,6 +81,20 @@ export function refreshToken(refreshTokenValue: string): Promise<LoginResponse> 
     body: JSON.stringify({
       refreshToken: refreshTokenValue,
     }),
+  });
+}
+
+export function findEmail(requestBody: EmailFindRequest): Promise<EmailFindResponse> {
+  return request<EmailFindResponse>("/api/member/auth/find-email", {
+    method: "POST",
+    body: JSON.stringify(requestBody),
+  });
+}
+
+export function findPassword(requestBody: PasswordFindRequest): Promise<void> {
+  return request<void>("/api/member/auth/find-password", {
+    method: "POST",
+    body: JSON.stringify(requestBody),
   });
 }
 

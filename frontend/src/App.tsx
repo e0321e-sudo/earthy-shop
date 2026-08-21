@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  findEmail,
+  findPassword,
   getKakaoLoginUrl,
   login,
   logout as requestLogout,
@@ -142,8 +144,9 @@ function loadDaumPostcodeScript(): Promise<void> {
 }
 
 type Page = "home" | "shop" | "search" | "detail" | "about" | "notice" | "board" | "cart" | "checkout" | "paymentResult" | "auth" | "mypage";
-type AuthMode = "login" | "signup";
+type AuthMode = "login" | "signup" | "findEmail" | "findPassword";
 type AuthForm = Pick<SignupRequest, "email" | "password" | "name" | "phone">;
+type EmailFindForm = Pick<SignupRequest, "name" | "phone">;
 type MyPageView = "home" | "orders" | "orderDetail" | "profile";
 type PaymentResultState =
   | { status: "processing"; message: string }
@@ -3806,6 +3809,11 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     name: "",
     phone: "",
   });
+  const [emailFindForm, setEmailFindForm] = useState<EmailFindForm>({
+    name: "",
+    phone: "",
+  });
+  const [passwordFindEmail, setPasswordFindEmail] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -3845,16 +3853,31 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }));
   };
 
-  const updatePhone = (value: string) => {
+  const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "").slice(0, 11);
-    const formattedPhone =
-      numbers.length > 7
-        ? `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7)}`
-        : numbers.length > 3
-          ? `${numbers.slice(0, 3)}-${numbers.slice(3)}`
-          : numbers;
 
-    updateField("phone", formattedPhone);
+    return numbers.length > 7
+      ? `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7)}`
+      : numbers.length > 3
+        ? `${numbers.slice(0, 3)}-${numbers.slice(3)}`
+        : numbers;
+  };
+
+  const updatePhone = (value: string) => {
+    updateField("phone", formatPhone(value));
+  };
+
+  const updateEmailFindPhone = (value: string) => {
+    setEmailFindForm((prevForm) => ({
+      ...prevForm,
+      phone: formatPhone(value),
+    }));
+  };
+
+  const moveAuthMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setMessage(null);
+    setError(null);
   };
 
   const updateAllAgreements = (checked: boolean) => {
@@ -3958,6 +3981,61 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     }
   };
 
+  const handleFindEmailSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      if (!emailFindForm.name.trim()) {
+        setError("이름을 입력해주세요.");
+        return;
+      }
+
+      if (!/^010-[0-9]{4}-[0-9]{4}$/.test(emailFindForm.phone)) {
+        setError("연락처는 010-0000-0000 형식으로 입력해주세요.");
+        return;
+      }
+
+      const response = await findEmail(emailFindForm);
+      setMessage(`${response.email} (${response.providerDescription})`);
+    } catch (submitError) {
+      const errorMessage = submitError instanceof Error ? submitError.message : "요청 실패";
+      setError(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFindPasswordSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      if (!passwordFindEmail.trim()) {
+        setError("이메일을 입력해주세요.");
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(passwordFindEmail)) {
+        setError("이메일 형식으로 입력해주세요.");
+        return;
+      }
+
+      await findPassword({ email: passwordFindEmail });
+      setMessage("임시비밀번호를 이메일로 보내드렸습니다.\n로그인 후 반드시 비밀번호를 변경해주세요.");
+      setPasswordFindEmail("");
+    } catch (submitError) {
+      const errorMessage = submitError instanceof Error ? submitError.message : "요청 실패";
+      setError(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const moveToLogin = () => {
     setSignupCompleted(false);
     setCompletedMemberName("");
@@ -3976,6 +4054,115 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
             로그인 화면으로 이동
           </button>
         </div>
+      </section>
+    );
+  }
+
+  if (mode === "findEmail") {
+    return (
+      <section className="page-view auth-view">
+        <div className="auth-panel">
+          <h1 className="auth-title">이메일 찾기</h1>
+
+          <form className="auth-form" onSubmit={handleFindEmailSubmit} noValidate>
+            <label>
+              이름
+              <input
+                value={emailFindForm.name}
+                onChange={(event) =>
+                  setEmailFindForm((prevForm) => ({
+                    ...prevForm,
+                    name: event.target.value,
+                  }))
+                }
+                required
+              />
+            </label>
+
+            <label>
+              연락처
+              <input
+                type="tel"
+                value={emailFindForm.phone}
+                placeholder="010-0000-0000"
+                inputMode="numeric"
+                maxLength={13}
+                onChange={(event) => updateEmailFindPhone(event.target.value)}
+                required
+              />
+            </label>
+
+            {error && <p className="form-error">{error}</p>}
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "처리 중" : "이메일 찾기"}
+            </button>
+          </form>
+
+          <button className="auth-switch-button" type="button" onClick={() => moveAuthMode("login")}>
+            로그인 화면으로 이동
+          </button>
+        </div>
+
+        {message && (
+          <div className="email-find-modal-backdrop" role="presentation">
+            <section className="email-find-modal" role="dialog" aria-modal="true">
+              <p>가입된 이메일</p>
+              <strong>{message}</strong>
+              <div>
+                <button type="button" onClick={moveToLogin}>
+                  확인
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  if (mode === "findPassword") {
+    return (
+      <section className="page-view auth-view">
+        <div className="auth-panel">
+          <h1 className="auth-title">비밀번호 찾기</h1>
+
+          <form className="auth-form" onSubmit={handleFindPasswordSubmit} noValidate>
+            <label>
+              이메일
+              <input
+                type="email"
+                value={passwordFindEmail}
+                onChange={(event) => setPasswordFindEmail(event.target.value)}
+                required
+              />
+            </label>
+
+            {error && <p className="form-error">{error}</p>}
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "처리 중" : "비밀번호 찾기"}
+            </button>
+          </form>
+
+          <button className="auth-switch-button" type="button" onClick={() => moveAuthMode("login")}>
+            로그인 화면으로 이동
+          </button>
+        </div>
+
+        {message && (
+          <div className="email-find-modal-backdrop" role="presentation">
+            <section className="email-find-modal" role="dialog" aria-modal="true">
+              <p>임시비밀번호 발급 완료</p>
+              <strong>{message}</strong>
+              <div>
+                <button type="button" onClick={moveToLogin}>
+                  확인
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     );
   }
@@ -4123,12 +4310,21 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
 
         {mode === "login" && (
           <>
-            <button className="auth-switch-button" type="button" onClick={() => setMode("signup")}>
+            <button className="auth-switch-button" type="button" onClick={() => moveAuthMode("signup")}>
               회원가입
             </button>
             <button className="kakao-login-button" type="button" onClick={() => window.location.href = getKakaoLoginUrl()}>
               카카오 1초 로그인/회원가입
             </button>
+            <div className="auth-help-links">
+              <button type="button" onClick={() => moveAuthMode("findEmail")}>
+                이메일 찾기
+              </button>
+              <span>/</span>
+              <button type="button" onClick={() => moveAuthMode("findPassword")}>
+                비밀번호 찾기
+              </button>
+            </div>
           </>
         )}
       </div>

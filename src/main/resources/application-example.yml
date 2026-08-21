@@ -33,6 +33,11 @@ jwt:
 toss:
   secret-key: your-toss-secret-key
 
+brevo:
+  api-key: your-brevo-api-key
+  sender-name: EARTHY
+  sender-email: your-sender-email@example.com
+
 oauth:
   kakao:
     client-id: your-kakao-rest-api-key

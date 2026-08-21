@@ -27,6 +27,8 @@ public enum ErrorCode {
 
     // 멤버
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다."),
+    MEMBER_EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_EMAIL_NOT_FOUND", "일치하는 회원 정보를 찾을 수 없습니다."),
+    MEMBER_PASSWORD_FIND_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_PASSWORD_FIND_NOT_FOUND", "일치하는 회원 정보를 찾을 수 없습니다."),
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "DUPLICATE_EMAIL", "이미 사용 중인 이메일입니다."),
     REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "REQUIRED_TERMS_NOT_AGREED", "필수 약관에 동의해주세요."),
     SAME_AS_OLD_PASSWORD(HttpStatus.BAD_REQUEST, "SAME_AS_OLD_PASSWORD", "기존 비밀번호와 동일한 비밀번호는 사용할 수 없습니다."),
@@ -67,6 +69,10 @@ public enum ErrorCode {
 
     // 카카오
     KAKAO_EMAIL_NOT_FOUND(HttpStatus.BAD_REQUEST, "KAKAO_EMAIL_NOT_FOUND", "카카오 계정에서 이메일을 가져올 수 없습니다."),
+
+    // 이메일
+    EMAIL_CONFIG_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_CONFIG_NOT_FOUND", "이메일 발송 설정이 필요합니다."),
+    EMAIL_SEND_FAILED(HttpStatus.BAD_REQUEST, "EMAIL_SEND_FAILED", "이메일 발송에 실패했습니다."),
 
     // 멱등성
     IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED", "멱등성 키가 필요합니다."),

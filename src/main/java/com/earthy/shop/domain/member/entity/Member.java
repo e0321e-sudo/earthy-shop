@@ -75,6 +75,8 @@ public class Member extends BaseTimeEntity {
         this.name = name;
         this.phone = phone;
         this.role = UserRole.MEMBER;
+        this.provider = LoginProvider.LOCAL;
+        this.providerId = null;
         this.active = true;
     }
 

@@ -1,10 +1,13 @@
 package com.earthy.shop.domain.member.controller;
 
 import com.earthy.shop.common.response.ApiResponseDto;
+import com.earthy.shop.domain.member.dto.request.MemberEmailFindRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLoginRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLogoutRequestDto;
+import com.earthy.shop.domain.member.dto.request.MemberPasswordFindRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberSignupRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberTokenRefreshRequestDto;
+import com.earthy.shop.domain.member.dto.response.MemberEmailFindResponseDto;
 import com.earthy.shop.domain.member.dto.response.MemberLoginResponseDto;
 import com.earthy.shop.domain.member.dto.response.MemberResponseDto;
 import com.earthy.shop.domain.member.service.MemberAuthService;
@@ -32,6 +35,24 @@ public class MemberAuthController {
             @Valid @RequestBody MemberSignupRequestDto requestDto
     ) {
         return ResponseEntity.ok(ApiResponseDto.success("회원가입 성공", memberService.signup(requestDto)));
+    }
+
+    // 이메일 찾기
+    @PostMapping("/find-email")
+    public ResponseEntity<ApiResponseDto<MemberEmailFindResponseDto>> findEmail(
+            @Valid @RequestBody MemberEmailFindRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success("이메일 찾기 성공", memberAuthService.findEmail(requestDto)));
+    }
+
+    // 비밀번호 찾기
+    @PostMapping("/find-password")
+    public ResponseEntity<ApiResponseDto<Void>> findPassword(
+            @Valid @RequestBody MemberPasswordFindRequestDto requestDto
+    ) {
+        memberAuthService.findPassword(requestDto);
+
+        return ResponseEntity.ok(ApiResponseDto.success("임시비밀번호 발급 성공", null));
     }
 
     // 회원 로그인

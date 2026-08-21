@@ -18,6 +18,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // 활성 회원 이메일 기준 단건 조회
     Optional<Member> findByEmailAndActiveTrue(String email);
 
+    // 이름과 연락처 기준 활성 회원 조회
+    Optional<Member> findByNameAndPhoneAndActiveTrue(String name, String phone);
+
     // 관리자 회원 목록 조회
     @Query("""
         select m
