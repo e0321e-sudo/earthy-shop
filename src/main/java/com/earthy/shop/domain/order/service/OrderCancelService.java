@@ -1,5 +1,9 @@
 package com.earthy.shop.domain.order.service;
 
+import com.earthy.shop.common.exception.BusinessException;
+import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
 import com.earthy.shop.domain.order.entity.Order;
@@ -22,12 +26,43 @@ public class OrderCancelService {
     private final PaymentService paymentService;
     private final ProductService productService;
     private final AddonService addonService;
+    private final IdempotencyService idempotencyService;
 
     // 내 주문 취소
     @Transactional
-    public OrderResponseDto cancelMyOrder(String email, Long orderId, String cancelReason) {
-        // 내 주문 조회
-        Order order = orderService.findMyOrder(email, orderId);
+    public OrderResponseDto cancelMyOrder(
+            String email,
+            Long orderId,
+            String cancelReason,
+            String idempotencyKey
+    ) {
+        // 멱등성 키 검증
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+        }
+
+        String apiPath = "/api/orders/" + orderId + "/cancel";
+
+        // 기존 멱등성 키 조회
+        IdempotencyKey existingKey = idempotencyService.find(email, idempotencyKey, apiPath);
+
+        if (existingKey != null) {
+            // 이미 처리 완료된 취소 요청이면 기존 주문 결과 반환
+            if (existingKey.isCompleted()) {
+                return orderService.getMyOrder(email, existingKey.getResourceId());
+            }
+
+            // 아직 처리 중이면 중복 요청 차단
+            if (existingKey.isProcessing()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING);
+            }
+        }
+
+        // 최초 요청이면 멱등성 키 생성
+        IdempotencyKey savedKey = idempotencyService.create(email, idempotencyKey, apiPath);
+
+        // 내 주문 잠금 조회
+        Order order = orderService.findMyOrderForUpdate(email, orderId);
 
         // 취소 사유 기본값 처리
         String reason = cancelReason == null || cancelReason.isBlank()
@@ -37,14 +72,47 @@ public class OrderCancelService {
         // 주문 취소 처리
         cancelOrder(order, reason);
 
+        // 주문 취소 완료 기록
+        idempotencyService.complete(
+                savedKey,
+                order.getId(),
+                "주문 취소 성공"
+        );
+
         return OrderResponseDto.from(order);
     }
 
     // 관리자 주문 취소
     @Transactional
-    public OrderResponseDto cancelAdminOrder(Long orderId, String cancelReason) {
-        // 주문 조회
-        Order order = orderService.getOrder(orderId);
+    public OrderResponseDto cancelAdminOrder(Long orderId, String cancelReason, String idempotencyKey) {
+        // 멱등성 키 검증
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+        }
+
+        String adminKeyOwner = "ADMIN";
+        String apiPath = "/api/admin/orders/" + orderId + "/cancel";
+
+        // 기존 멱등성 키 조회
+        IdempotencyKey existingKey = idempotencyService.find(adminKeyOwner, idempotencyKey, apiPath);
+
+        if (existingKey != null) {
+            // 이미 처리 완료된 취소 요청이면 기존 주문 결과 반환
+            if (existingKey.isCompleted()) {
+                return orderService.getOrderDetail(existingKey.getResourceId());
+            }
+
+            // 아직 처리 중이면 중복 요청 차단
+            if (existingKey.isProcessing()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING);
+            }
+        }
+
+        // 최초 요청이면 멱등성 키 생성
+        IdempotencyKey savedKey = idempotencyService.create(adminKeyOwner, idempotencyKey, apiPath);
+
+        // 주문 잠금 조회
+        Order order = orderService.getOrderForUpdate(orderId);
 
         // 취소 사유 기본값 처리
         String reason = cancelReason == null || cancelReason.isBlank()
@@ -53,6 +121,13 @@ public class OrderCancelService {
 
         // 주문 취소 처리
         cancelOrder(order, reason);
+
+        // 관리자 주문 취소 완료 기록
+        idempotencyService.complete(
+                savedKey,
+                order.getId(),
+                "관리자 주문 취소 성공"
+        );
 
         return OrderResponseDto.from(order);
     }

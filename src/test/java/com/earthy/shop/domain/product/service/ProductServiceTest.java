@@ -196,13 +196,14 @@ class ProductServiceTest {
         // given
         Product product = product("sunset sea postcard", ProductCategory.POSTCARD, 3500, 5);
 
-        given(productRepository.findByIdAndActiveTrueAndDeletedFalse(1L))
+        given(productRepository.findActiveByIdForUpdate(1L))
                 .willReturn(Optional.of(product));
 
         // when
         productService.decreaseStock(1L, 2);
 
         // then
+        verify(productRepository).findActiveByIdForUpdate(1L);
         assertThat(product.getStockQuantity()).isEqualTo(3);
     }
 
@@ -255,7 +256,7 @@ class ProductServiceTest {
         // given
         Product product = product("sunset sea postcard", ProductCategory.POSTCARD, 3500, 1);
 
-        given(productRepository.findByIdAndActiveTrueAndDeletedFalse(1L))
+        given(productRepository.findActiveByIdForUpdate(1L))
                 .willReturn(Optional.of(product));
 
         // when & then
@@ -264,6 +265,7 @@ class ProductServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUT_OF_STOCK)
                 );
+        verify(productRepository).findActiveByIdForUpdate(1L);
     }
 
     @Test

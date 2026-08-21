@@ -108,8 +108,8 @@ public class AddonService {
     // 추가상품 재고 차감
     @Transactional
     public void decreaseStock(Long addonId, int quantity) {
-        // 추가상품 조회
-        Addon addon = getActiveAddon(addonId);
+        // 추가상품 잠금 조회
+        Addon addon = getActiveAddonForUpdate(addonId);
 
         // 추가상품 재고 차감
         addon.decreaseStock(quantity);
@@ -143,6 +143,12 @@ public class AddonService {
     // 활성 추가상품 조회
     public Addon getActiveAddon(Long addonId) {
         return addonRepository.findByIdAndActiveTrueAndDeletedFalse(addonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
+    }
+
+    // 활성 추가상품 잠금 조회
+    private Addon getActiveAddonForUpdate(Long addonId) {
+        return addonRepository.findActiveByIdForUpdate(addonId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ADDON_NOT_FOUND));
     }
 

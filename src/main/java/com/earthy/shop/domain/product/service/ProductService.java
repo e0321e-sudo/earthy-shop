@@ -146,8 +146,8 @@ public class ProductService {
     // 상품 재고 차감
     @Transactional
     public void decreaseStock(Long productId, int quantity) {
-        // 상품 조회
-        Product product = getActiveProduct(productId);
+        // 상품 잠금 조회
+        Product product = getActiveProductForUpdate(productId);
 
         // 상품 재고 차감
         product.decreaseStock(quantity);
@@ -181,6 +181,12 @@ public class ProductService {
     // 활성 상품 조회
     public Product getActiveProduct(Long productId) {
         return productRepository.findByIdAndActiveTrueAndDeletedFalse(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    // 활성 상품 잠금 조회
+    private Product getActiveProductForUpdate(Long productId) {
+        return productRepository.findActiveByIdForUpdate(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
     }
 

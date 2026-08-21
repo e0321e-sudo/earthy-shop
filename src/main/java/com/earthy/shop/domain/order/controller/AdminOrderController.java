@@ -61,11 +61,12 @@ public class AdminOrderController {
     @PatchMapping("/{orderId}/cancel")
     public ResponseEntity<ApiResponseDto<OrderResponseDto>> cancelAdminOrder(
             @PathVariable Long orderId,
-            @RequestBody OrderCancelRequestDto requestDto
+            @RequestBody OrderCancelRequestDto requestDto,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponseDto.success(
                 "관리자 주문 취소 성공",
-                orderCancelService.cancelAdminOrder(orderId, requestDto.getCancelReason())
+                orderCancelService.cancelAdminOrder(orderId, requestDto.getCancelReason(), idempotencyKey)
         ));
     }
 }

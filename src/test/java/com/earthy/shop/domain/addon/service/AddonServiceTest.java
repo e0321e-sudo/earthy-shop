@@ -89,12 +89,13 @@ class AddonServiceTest {
         // given
         Addon addon = addon(5);
 
-        given(addonRepository.findByIdAndActiveTrueAndDeletedFalse(1L)).willReturn(Optional.of(addon));
+        given(addonRepository.findActiveByIdForUpdate(1L)).willReturn(Optional.of(addon));
 
         // when
         addonService.decreaseStock(1L, 2);
 
         // then
+        verify(addonRepository).findActiveByIdForUpdate(1L);
         assertThat(addon.getStockQuantity()).isEqualTo(3);
     }
 
@@ -103,7 +104,7 @@ class AddonServiceTest {
         // given
         Addon addon = addon(1);
 
-        given(addonRepository.findByIdAndActiveTrueAndDeletedFalse(1L)).willReturn(Optional.of(addon));
+        given(addonRepository.findActiveByIdForUpdate(1L)).willReturn(Optional.of(addon));
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -111,6 +112,7 @@ class AddonServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUT_OF_STOCK)
                 );
+        verify(addonRepository).findActiveByIdForUpdate(1L);
     }
 
     @Test

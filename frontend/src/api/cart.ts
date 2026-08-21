@@ -35,9 +35,12 @@ export function getCart(): Promise<CartResponse> {
   return request<CartResponse>("/api/cart");
 }
 
-export function addCartItem(requestBody: CartItemAddRequest): Promise<CartResponse> {
+export function addCartItem(requestBody: CartItemAddRequest, idempotencyKey: string): Promise<CartResponse> {
   return request<CartResponse>("/api/cart", {
     method: "POST",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify(requestBody),
   });
 }

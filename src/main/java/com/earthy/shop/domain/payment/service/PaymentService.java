@@ -2,6 +2,8 @@ package com.earthy.shop.domain.payment.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent;
 import com.earthy.shop.domain.order.entity.Order;
@@ -37,15 +39,71 @@ public class PaymentService {
     private final AddonService addonService;
     private final TossPaymentClient tossPaymentClient;
     private final ApplicationEventPublisher eventPublisher;
+    private final IdempotencyService idempotencyService;
 
     private static final DateTimeFormatter ORDER_DATE_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     // 결제 승인
     @Transactional
-    public PaymentResponseDto confirmPayment(PaymentConfirmRequestDto requestDto) {
-        // 주문 조회
-        Order order = orderService.getOrder(requestDto.getOrderId());
+    public PaymentResponseDto confirmPayment(
+            String email,
+            PaymentConfirmRequestDto requestDto,
+            String idempotencyKey
+    ) {
+        // 멱등성 키 검증
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+        }
+
+        String apiPath = "/api/payments/confirm";
+
+        // 기존 멱등성 키 조회
+        IdempotencyKey existingKey = idempotencyService.find(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        if (existingKey != null) {
+            // 이미 처리 완료된 결제 승인 요청이면 기존 결제 결과 반환
+            if (existingKey.isCompleted()) {
+                Payment payment = paymentRepository.findById(existingKey.getResourceId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
+
+                return PaymentResponseDto.from(payment);
+            }
+
+            // 아직 처리 중이면 중복 요청 차단
+            if (existingKey.isProcessing()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING);
+            }
+        }
+
+        // 최초 요청이면 멱등성 키 생성
+        IdempotencyKey savedKey = idempotencyService.create(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        // 실제 결제 승인
+        PaymentResponseDto responseDto = confirmPaymentInternal(requestDto);
+
+        // 결제 승인 완료 기록
+        idempotencyService.complete(
+                savedKey,
+                responseDto.paymentId(),
+                "결제 승인 성공"
+        );
+
+        return responseDto;
+    }
+
+    // 실제 결제 승인
+    private PaymentResponseDto confirmPaymentInternal(PaymentConfirmRequestDto requestDto) {
+        // 주문 잠금 조회
+        Order order = orderService.getOrderForUpdate(requestDto.getOrderId());
 
         log.info("[PAYMENT CONFIRM STARTED] orderId={} | orderNumber={} | amount={}",
                 order.getId(),

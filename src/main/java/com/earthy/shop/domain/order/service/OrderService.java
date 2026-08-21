@@ -2,6 +2,8 @@ package com.earthy.shop.domain.order.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.common.response.PageResponseDto;
 import com.earthy.shop.domain.cart.dto.response.CartItemResponseDto;
 import com.earthy.shop.domain.cart.dto.response.CartResponseDto;
@@ -49,10 +51,63 @@ public class OrderService {
     private final ProductService productService;
     private final AddonService addonService;
     private final ApplicationEventPublisher eventPublisher;
+    private final IdempotencyService idempotencyService;
 
     // 주문 생성
     @Transactional
-    public OrderResponseDto createOrder(String email, OrderCreateRequestDto requestDto) {
+    public OrderResponseDto createOrder(
+            String email,
+            OrderCreateRequestDto requestDto,
+            String idempotencyKey
+    ) {
+        // 멱등성 키 검증
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+        }
+
+        String apiPath = "/api/orders";
+
+        // 기존 멱등성 키 조회
+        IdempotencyKey existingKey = idempotencyService.find(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        if (existingKey != null) {
+            // 이미 처리 완료된 요청이면 기존 주문 결과 반환
+            if (existingKey.isCompleted()) {
+                return getMyOrder(email, existingKey.getResourceId());
+            }
+
+            // 아직 처리 중이면 중복 요청 차단
+            if (existingKey.isProcessing()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING);
+            }
+        }
+
+        // 최초 요청이면 멱등성 키 생성
+        IdempotencyKey savedKey = idempotencyService.create(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        // 실제 주문 생성
+        OrderResponseDto responseDto = createOrderInternal(email, requestDto);
+
+        // 주문 생성 완료 기록
+        idempotencyService.complete(
+                savedKey,
+                responseDto.orderId(),
+                "주문 생성 성공"
+        );
+
+        return responseDto;
+    }
+
+    // 실제 주문 생성
+    private OrderResponseDto createOrderInternal(String email, OrderCreateRequestDto requestDto) {
         // 요청 회원 조회
         Member member = memberService.getActiveMember(email);
 
@@ -227,6 +282,14 @@ public class OrderService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
     }
 
+    // 내 주문 단건 잠금 조회 (취소 처리용 Order 엔티티 반환)
+    public Order findMyOrderForUpdate(String email, Long orderId) {
+        Member member = memberService.getActiveMember(email);
+
+        return orderRepository.findByIdAndMemberForUpdate(orderId, member)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
     // 관리자 주문 목록 조회
     public PageResponseDto<OrderResponseDto> getOrders(Pageable pageable) {
         return PageResponseDto.from(orderRepository.findByStatusNot(OrderStatus.PENDING, pageable)
@@ -262,6 +325,12 @@ public class OrderService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
     }
 
+    // 주문 잠금 조회
+    public Order getOrderForUpdate(Long orderId) {
+        return orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+    }
+
     // 주문 결제 완료 처리
     @Transactional
     public void payOrder(Order order, String paymentMethod) {
@@ -276,8 +345,8 @@ public class OrderService {
     // 관리자 주문 상태 변경
     @Transactional
     public OrderResponseDto updateOrderStatus(Long orderId, OrderStatusUpdateRequestDto requestDto) {
-        // 주문 조회
-        Order order = getOrder(orderId);
+        // 주문 잠금 조회
+        Order order = getOrderForUpdate(orderId);
         OrderStatus previousStatus = order.getStatus();
 
         // 배송 정보 등록

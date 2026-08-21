@@ -32,10 +32,12 @@ public class CartController {
     @PostMapping
     public ResponseEntity<ApiResponseDto<CartResponseDto>> addCartItem(
             Authentication authentication,
-            @Valid @RequestBody CartItemAddRequestDto requestDto
+            @Valid @RequestBody CartItemAddRequestDto requestDto,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponseDto.success(
-                "장바구니 상품 담기 성공", cartService.addCartItem(authentication.getName(), requestDto)));
+                "장바구니 상품 담기 성공",
+                cartService.addCartItem(authentication.getName(), requestDto, idempotencyKey)));
     }
 
     // 장바구니 수량 변경

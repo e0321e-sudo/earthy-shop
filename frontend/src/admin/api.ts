@@ -436,9 +436,12 @@ export function updateAdminOrderStatus(
   });
 }
 
-export function cancelAdminOrder(orderId: number, cancelReason = "") {
+export function cancelAdminOrder(orderId: number, cancelReason = "", idempotencyKey = "") {
   return adminRequest<AdminOrder>(`/api/admin/orders/${orderId}/cancel`, {
     method: "PATCH",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify({ cancelReason }),
   });
 }

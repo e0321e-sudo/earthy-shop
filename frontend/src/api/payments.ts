@@ -19,9 +19,12 @@ export interface PaymentResponse {
   createdAt: string;
 }
 
-export function confirmPayment(requestBody: PaymentConfirmRequest): Promise<PaymentResponse> {
+export function confirmPayment(requestBody: PaymentConfirmRequest, idempotencyKey: string): Promise<PaymentResponse> {
   return request<PaymentResponse>("/api/payments/confirm", {
     method: "POST",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify(requestBody),
   });
 }

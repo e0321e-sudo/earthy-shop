@@ -29,12 +29,20 @@ public class OrderController {
     // 주문 생성
     @PostMapping
     public ResponseEntity<ApiResponseDto<OrderResponseDto>> createOrder(
-            Authentication authentication,
-            @Valid @RequestBody OrderCreateRequestDto requestDto
-            ) {
-        String email = authentication.getName();
-
-        return ResponseEntity.ok(ApiResponseDto.success("주문 생성 성공", orderService.createOrder(email, requestDto)));
+            @AuthenticationPrincipal UserDetailsImpl userDetails,
+            @Valid @RequestBody OrderCreateRequestDto requestDto,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
+    ) {
+        return ResponseEntity.ok(
+                ApiResponseDto.success(
+                        "주문 생성 성공",
+                        orderService.createOrder(
+                                userDetails.getEmail(),
+                                requestDto,
+                                idempotencyKey
+                        )
+                )
+        );
     }
 
     // 내 주문 목록 조회
@@ -64,14 +72,16 @@ public class OrderController {
     public ResponseEntity<ApiResponseDto<OrderResponseDto>> cancelMyOrder(
             @AuthenticationPrincipal UserDetailsImpl userDetails,
             @PathVariable Long orderId,
-            @RequestBody OrderCancelRequestDto requestDto
+            @RequestBody OrderCancelRequestDto requestDto,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey
     ) {
         return ResponseEntity.ok(ApiResponseDto.success(
                 "주문 취소 성공",
                 orderCancelService.cancelMyOrder(
                         userDetails.getUsername(),
                         orderId,
-                        requestDto.getCancelReason()
+                        requestDto.getCancelReason(),
+                        idempotencyKey
                 )
         ));
     }

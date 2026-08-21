@@ -2,6 +2,8 @@ package com.earthy.shop.domain.payment.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent;
@@ -56,6 +58,9 @@ class PaymentServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private IdempotencyService idempotencyService;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -72,7 +77,7 @@ class PaymentServiceTest {
                 "DONE"
         );
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
         given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
@@ -85,9 +90,10 @@ class PaymentServiceTest {
                 });
 
         // when
-        PaymentResponseDto response = paymentService.confirmPayment(requestDto);
+        PaymentResponseDto response = paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key");
 
         // then
+        verify(orderService).getOrderForUpdate(1L);
         verify(productService).decreaseStock(1L, 1);
         verify(addonService).decreaseStock(1L, 1);
         verify(orderService).payOrder(order, "카드");
@@ -98,18 +104,87 @@ class PaymentServiceTest {
     }
 
     @Test
+    void 완료된_결제승인_요청이면_기존_결제결과를_반환한다() {
+        // given
+        Order order = paidReadyOrder();
+        Payment payment = payment(order, PaymentStatus.DONE);
+        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        IdempotencyKey completedKey = new IdempotencyKey(
+                "test@example.com",
+                "payment-confirm-key",
+                "/api/payments/confirm"
+        );
+        completedKey.complete(1L, "결제 승인 성공");
+
+        given(idempotencyService.find("test@example.com", "payment-confirm-key", "/api/payments/confirm"))
+                .willReturn(completedKey);
+        given(paymentRepository.findById(1L)).willReturn(Optional.of(payment));
+
+        // when
+        PaymentResponseDto response = paymentService.confirmPayment(
+                "test@example.com",
+                requestDto,
+                "payment-confirm-key"
+        );
+
+        // then
+        verify(orderService, never()).getOrderForUpdate(1L);
+        verify(tossPaymentClient, never()).confirmPayment(any());
+        assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
+    }
+
+    @Test
+    void 처리중인_결제승인_요청이면_중복_요청_예외가_발생한다() {
+        // given
+        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        IdempotencyKey processingKey = new IdempotencyKey(
+                "test@example.com",
+                "payment-confirm-key",
+                "/api/payments/confirm"
+        );
+
+        given(idempotencyService.find("test@example.com", "payment-confirm-key", "/api/payments/confirm"))
+                .willReturn(processingKey);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> paymentService.confirmPayment(
+                        "test@example.com",
+                        requestDto,
+                        "payment-confirm-key"
+                ))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING)
+                );
+        verify(tossPaymentClient, never()).confirmPayment(any());
+    }
+
+    @Test
+    void 결제승인_멱등성_키가_없으면_예외가_발생한다() {
+        // given
+        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, ""))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED)
+                );
+    }
+
+    @Test
     void 이미_완료된_결제가_있으면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
         Payment payment = new Payment(order, "old-key", order.getOrderNumber(), 15500, "카드", PaymentStatus.DONE);
         PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_ALREADY_COMPLETED)
                 );
@@ -122,13 +197,13 @@ class PaymentServiceTest {
         Order order = paidReadyOrder();
         PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15000, "카드");
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH)
                 );
@@ -148,14 +223,14 @@ class PaymentServiceTest {
                 "FAILED"
         );
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
         given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_CONFIRM_FAILED)
                 );
@@ -167,13 +242,13 @@ class PaymentServiceTest {
         Order order = paidReadyOrder();
         PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(true);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_PAYMENT_KEY)
                 );
@@ -193,14 +268,14 @@ class PaymentServiceTest {
                 "DONE"
         );
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
         given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_ORDER_MISMATCH)
                 );
@@ -219,14 +294,14 @@ class PaymentServiceTest {
                 "DONE"
         );
 
-        given(orderService.getOrder(1L)).willReturn(order);
+        given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
         given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> paymentService.confirmPayment(requestDto))
+                .isThrownBy(() -> paymentService.confirmPayment("test@example.com", requestDto, "payment-confirm-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH)
                 );

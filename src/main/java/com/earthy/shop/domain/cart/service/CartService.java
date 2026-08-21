@@ -2,6 +2,8 @@ package com.earthy.shop.domain.cart.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.dto.request.CartItemAddRequestDto;
@@ -31,6 +33,7 @@ public class CartService {
     private final MemberService memberService;
     private final ProductService productService;
     private final AddonService addonService;
+    private final IdempotencyService idempotencyService;
 
     // 장바구니 조회
     public CartResponseDto getCart(String email) {
@@ -47,7 +50,59 @@ public class CartService {
 
     // 장바구니 상품 담기
     @Transactional
-    public CartResponseDto addCartItem(String email, CartItemAddRequestDto requestDto) {
+    public CartResponseDto addCartItem(
+            String email,
+            CartItemAddRequestDto requestDto,
+            String idempotencyKey
+    ) {
+        // 멱등성 키 검증
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED);
+        }
+
+        String apiPath = "/api/cart";
+
+        // 기존 멱등성 키 조회
+        IdempotencyKey existingKey = idempotencyService.find(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        if (existingKey != null) {
+            // 이미 처리 완료된 요청이면 장바구니 수량을 다시 증가시키지 않음
+            if (existingKey.isCompleted()) {
+                return getCart(email);
+            }
+
+            // 아직 처리 중이면 중복 요청 차단
+            if (existingKey.isProcessing()) {
+                throw new BusinessException(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING);
+            }
+        }
+
+        // 최초 요청이면 멱등성 키 생성
+        IdempotencyKey savedKey = idempotencyService.create(
+                email,
+                idempotencyKey,
+                apiPath
+        );
+
+        // 실제 장바구니 상품 담기
+        CartResponseDto responseDto = addCartItemInternal(email, requestDto);
+
+        // 장바구니 담기 완료 기록
+        idempotencyService.complete(
+                savedKey,
+                null,
+                "장바구니 상품 담기 성공"
+        );
+
+        return responseDto;
+    }
+
+    // 실제 장바구니 상품 담기
+    private CartResponseDto addCartItemInternal(String email, CartItemAddRequestDto requestDto) {
         // 요청 회원 조회
         Member member = memberService.getActiveMember(email);
 

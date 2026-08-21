@@ -56,9 +56,15 @@ export interface OrderCreateRequest {
   deliveryMemo: string;
 }
 
-export function createOrder(requestBody: OrderCreateRequest): Promise<OrderResponse> {
+export function createOrder(
+  requestBody: OrderCreateRequest,
+  idempotencyKey: string
+): Promise<OrderResponse> {
   return request<OrderResponse>("/api/orders", {
     method: "POST",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify(requestBody),
   });
 }
@@ -75,9 +81,16 @@ export function getMyOrder(orderId: number): Promise<OrderResponse> {
   return request<OrderResponse>(`/api/orders/${orderId}`);
 }
 
-export function cancelMyOrder(orderId: number, cancelReason = ""): Promise<OrderResponse> {
+export function cancelMyOrder(
+  orderId: number,
+  cancelReason = "",
+  idempotencyKey = ""
+): Promise<OrderResponse> {
   return request<OrderResponse>(`/api/orders/${orderId}/cancel`, {
     method: "PATCH",
+    headers: {
+      "Idempotency-Key": idempotencyKey,
+    },
     body: JSON.stringify({ cancelReason }),
   });
 }

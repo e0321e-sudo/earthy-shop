@@ -66,7 +66,12 @@ public enum ErrorCode {
     BOARD_ACCESS_DENIED(HttpStatus.FORBIDDEN, "BOARD_ACCESS_DENIED", "게시글 접근 권한이 없습니다."),
 
     // 카카오
-    KAKAO_EMAIL_NOT_FOUND(HttpStatus.BAD_REQUEST, "KAKAO_EMAIL_NOT_FOUND", "카카오 계정에서 이메일을 가져올 수 없습니다.");
+    KAKAO_EMAIL_NOT_FOUND(HttpStatus.BAD_REQUEST, "KAKAO_EMAIL_NOT_FOUND", "카카오 계정에서 이메일을 가져올 수 없습니다."),
+
+    // 멱등성
+    IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED", "멱등성 키가 필요합니다."),
+    IDEMPOTENCY_KEY_NOT_FOUND(HttpStatus.NOT_FOUND, "IDEMPOTENCY_KEY_NOT_FOUND", "멱등성 키를 찾을 수 없습니다."),
+    IDEMPOTENCY_REQUEST_PROCESSING(HttpStatus.CONFLICT, "IDEMPOTENCY_REQUEST_PROCESSING", "동일한 요청이 처리 중입니다.");
 
     private final HttpStatus status;
     private final String code;

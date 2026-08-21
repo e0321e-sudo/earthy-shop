@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   getKakaoLoginUrl,
   login,
@@ -201,8 +201,8 @@ interface CartProps {
   loading: boolean;
   error: string | null;
   onOpenDetail: (productId: number) => void;
-  onUpdateQuantity: (cartItemId: number, quantity: number, addonQuantity: number | null) => void;
-  onRemove: (cartItemId: number) => void;
+  onUpdateQuantity: (cartItemId: number, quantity: number, addonQuantity: number | null) => Promise<void>;
+  onRemove: (cartItemId: number) => Promise<void>;
   onCheckout: (cartItemIds?: number[]) => void;
 }
 
@@ -210,7 +210,7 @@ interface CheckoutProps {
   totalPrice: number;
   member: MemberResponse | null;
   onMemberLoaded: (member: MemberResponse) => void;
-  onCreateOrder: (requestBody: OrderCreateRequest) => Promise<OrderResponse>;
+  onCreateOrder: (requestBody: OrderCreateRequest, idempotencyKey: string) => Promise<OrderResponse>;
 }
 
 interface PaymentResultProps {
@@ -388,6 +388,25 @@ function getStoredPaymentOrder(orderNumber: string | null): OrderResponse | unde
 // 결제 승인 후 정리할 장바구니 항목 저장
 function storePaymentCartItemIds(orderNumber: string, cartItemIds: number[]) {
   sessionStorage.setItem(`earthyPaymentCartItems:${orderNumber}`, JSON.stringify(cartItemIds));
+}
+
+// 결제 승인 멱등성 키 저장
+function storePaymentConfirmKey(orderNumber: string, idempotencyKey: string) {
+  sessionStorage.setItem(`earthyPaymentConfirmKey:${orderNumber}`, idempotencyKey);
+}
+
+// 결제 승인 멱등성 키 조회 또는 생성
+function getOrCreatePaymentConfirmKey(orderNumber: string) {
+  const storedKey = sessionStorage.getItem(`earthyPaymentConfirmKey:${orderNumber}`);
+
+  if (storedKey) {
+    return storedKey;
+  }
+
+  const nextKey = createIdempotencyKey();
+  storePaymentConfirmKey(orderNumber, nextKey);
+
+  return nextKey;
 }
 
 // 결제 승인 후 정리할 장바구니 항목 조회
@@ -729,15 +748,19 @@ function App() {
     // 토스 결제 승인
     async function approvePayment() {
       try {
-        const payment = await confirmPayment({
-          orderId: confirmedOrderId,
-          paymentKey: confirmedPaymentKey,
-          amount: confirmedAmount,
-        });
+        const payment = await confirmPayment(
+          {
+            orderId: confirmedOrderId,
+            paymentKey: confirmedPaymentKey,
+            amount: confirmedAmount,
+          },
+          getOrCreatePaymentConfirmKey(confirmedTossOrderNumber)
+        );
 
         await clearPaidCartItems(confirmedTossOrderNumber);
         sessionStorage.removeItem(`earthyPaymentOrder:${confirmedTossOrderNumber}`);
         sessionStorage.removeItem(`earthyPaymentOrderData:${confirmedTossOrderNumber}`);
+        sessionStorage.removeItem(`earthyPaymentConfirmKey:${confirmedTossOrderNumber}`);
         await loadMyPage();
         setPaymentResult({
           status: "success",
@@ -847,7 +870,7 @@ function App() {
       return;
     }
 
-    const cart = await addCartItem(requestBody);
+    const cart = await addCartItem(requestBody, createIdempotencyKey());
     setCartItems(cart.items);
     setCartNoticeOpen(true);
     setCartBumped(true);
@@ -860,7 +883,7 @@ function App() {
       return;
     }
 
-    const cart = await addCartItem(requestBody);
+    const cart = await addCartItem(requestBody, createIdempotencyKey());
     setCartItems(cart.items);
 
     if (accessToken) {
@@ -887,14 +910,15 @@ function App() {
   };
 
   // 주문 생성
-  const submitOrder = async (requestBody: OrderCreateRequest) => {
+  const submitOrder = async (requestBody: OrderCreateRequest, idempotencyKey: string) => {
     const order = await createOrder({
       ...requestBody,
       cartItemIds: checkoutCartItemIds,
-    });
+    }, idempotencyKey);
 
     const orderedCartItemIds = checkoutCartItemIds ?? cartItems.map((item) => item.cartItemId);
     storePaymentCartItemIds(order.orderNumber, orderedCartItemIds);
+    storePaymentConfirmKey(order.orderNumber, createIdempotencyKey());
 
     return order;
   };
@@ -954,7 +978,7 @@ function App() {
 
   // 주문 취소
   const cancelOrder = async (orderId: number, cancelReason: string) => {
-    const updatedOrder = await cancelMyOrder(orderId, cancelReason);
+    const updatedOrder = await cancelMyOrder(orderId, cancelReason, createIdempotencyKey());
     setOrders((prevOrders) =>
       prevOrders.map((order) => (order.orderId === orderId ? updatedOrder : order))
     );
@@ -1296,7 +1320,7 @@ function CartNotice({
   onOpenCart: () => void;
 }) {
   return (
-    <div className="cart-notice-backdrop" role="presentation" onClick={onClose}>
+    <div className="cart-notice-backdrop" role="presentation">
       <section className="cart-notice" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <p>장바구니에 담았습니다.</p>
         <div>
@@ -2059,6 +2083,7 @@ function ProductDetail({
   const [addonQuantity, setAddonQuantity] = useState(1);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     setQuantity(1);
@@ -2098,6 +2123,11 @@ function ProductDetail({
   });
 
   const handleCartAction = async (action: "cart" | "buy") => {
+    if (submittingRef.current) {
+      return;
+    }
+
+    submittingRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -2122,6 +2152,7 @@ function ProductDetail({
     } catch (cartError) {
       setSubmitError(cartError instanceof Error ? cartError.message : "장바구니 처리 실패");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -2281,7 +2312,9 @@ function Cart({
     setActionError(null);
 
     try {
-      await Promise.all(selectedItems.map((item) => onRemove(item.cartItemId)));
+      for (const item of selectedItems) {
+        await onRemove(item.cartItemId);
+      }
       setSelectedItemIds([]);
     } catch (removeError) {
       setActionError(removeError instanceof Error ? removeError.message : "선택 상품 삭제 실패");
@@ -2463,6 +2496,7 @@ function Cart({
 function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: CheckoutProps) {
   // 주문서 결제예정금액
   const deliveryFee = calculateDeliveryFee(totalPrice);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const [form, setForm] = useState<OrderCreateRequest>({
     receiverName: "",
     receiverPhone: "",
@@ -2630,7 +2664,9 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
     setError(null);
 
     try {
-      const order = await onCreateOrder(form);
+      idempotencyKeyRef.current ??= createIdempotencyKey();
+
+      const order = await onCreateOrder(form, idempotencyKeyRef.current);
       await requestTossPayment(order);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "결제 요청 실패");
@@ -2838,6 +2874,15 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
       )}
     </section>
   );
+}
+
+// 멱등성 키 생성
+function createIdempotencyKey() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `order-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function PostcodeModal({

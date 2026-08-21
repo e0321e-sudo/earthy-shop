@@ -2,6 +2,8 @@ package com.earthy.shop.domain.order.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.common.response.PageResponseDto;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.dto.response.CartItemResponseDto;
@@ -37,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,6 +65,9 @@ class OrderServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private IdempotencyService idempotencyService;
 
     @InjectMocks
     private OrderService orderService;
@@ -89,7 +95,7 @@ class OrderServiceTest {
                 });
 
         // when
-        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto);
+        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto, "test-idempotency-key");
 
         // then
         verify(memberService).registerOrderContactIfBlank(
@@ -100,11 +106,87 @@ class OrderServiceTest {
                 "711호"
         );
         verify(productService).validateStock(1L, 2);
+        verify(idempotencyService).complete(any(), any(), any());
         assertThat(response.orderId()).isEqualTo(1L);
         assertThat(response.items()).hasSize(1);
         assertThat(response.productTotalPrice()).isEqualTo(7000);
         assertThat(response.deliveryFee()).isEqualTo(2500);
         assertThat(response.totalPrice()).isEqualTo(9500);
+    }
+
+    @Test
+    void 멱등성_키가_없으면_주문_생성_예외가_발생한다() {
+        // given
+        OrderCreateRequestDto requestDto = orderRequest(null);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> orderService.createOrder("test@example.com", requestDto, ""))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED)
+                );
+        verify(idempotencyService, never()).find(any(), any(), any());
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void 완료된_멱등성_요청이면_기존_주문_결과를_반환한다() {
+        // given
+        Member member = member();
+        Order order = savedOrder(order(member, 3500, 2500, 0));
+        order.pay("카드");
+
+        IdempotencyKey completedKey = new IdempotencyKey(
+                "test@example.com",
+                "test-idempotency-key",
+                "/api/orders"
+        );
+        completedKey.complete(1L, "주문 생성 성공");
+
+        given(idempotencyService.find("test@example.com", "test-idempotency-key", "/api/orders"))
+                .willReturn(completedKey);
+        given(memberService.getActiveMember("test@example.com")).willReturn(member);
+        given(orderRepository.findByIdAndMemberAndStatusNot(1L, member, OrderStatus.PENDING))
+                .willReturn(Optional.of(order));
+
+        // when
+        OrderResponseDto response = orderService.createOrder(
+                "test@example.com",
+                orderRequest(null),
+                "test-idempotency-key"
+        );
+
+        // then
+        assertThat(response.orderId()).isEqualTo(1L);
+        assertThat(response.status()).isEqualTo(OrderStatus.PAID);
+        verify(idempotencyService, never()).create(any(), any(), any());
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void 처리중인_멱등성_요청이면_중복_요청_예외가_발생한다() {
+        // given
+        IdempotencyKey processingKey = new IdempotencyKey(
+                "test@example.com",
+                "test-idempotency-key",
+                "/api/orders"
+        );
+
+        given(idempotencyService.find("test@example.com", "test-idempotency-key", "/api/orders"))
+                .willReturn(processingKey);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> orderService.createOrder(
+                        "test@example.com",
+                        orderRequest(null),
+                        "test-idempotency-key"
+                ))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING)
+                );
+        verify(idempotencyService, never()).create(any(), any(), any());
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test
@@ -124,7 +206,7 @@ class OrderServiceTest {
         given(orderRepository.save(any(Order.class))).willAnswer(invocation -> savedOrder(invocation.getArgument(0)));
 
         // when
-        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto);
+        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto, "test-idempotency-key");
 
         // then
         verify(productService).validateStock(1L, 2);
@@ -150,7 +232,7 @@ class OrderServiceTest {
         given(orderRepository.save(any(Order.class))).willAnswer(invocation -> savedOrder(invocation.getArgument(0)));
 
         // when
-        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto);
+        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto, "test-idempotency-key");
 
         // then
         assertThat(response.deliveryFee()).isZero();
@@ -181,7 +263,7 @@ class OrderServiceTest {
         given(orderRepository.save(any(Order.class))).willAnswer(invocation -> savedOrder(invocation.getArgument(0)));
 
         // when
-        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto);
+        OrderResponseDto response = orderService.createOrder("test@example.com", requestDto, "test-idempotency-key");
 
         // then
         assertThat(response.deliveryFee()).isEqualTo(2500);
@@ -200,7 +282,7 @@ class OrderServiceTest {
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> orderService.createOrder("test@example.com", requestDto))
+                .isThrownBy(() -> orderService.createOrder("test@example.com", requestDto, "test-idempotency-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.EMPTY_CART)
                 );
@@ -219,7 +301,7 @@ class OrderServiceTest {
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> orderService.createOrder("test@example.com", requestDto))
+                .isThrownBy(() -> orderService.createOrder("test@example.com", requestDto, "test-idempotency-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_ITEM_NOT_FOUND)
                 );
@@ -275,12 +357,13 @@ class OrderServiceTest {
                 null
         );
 
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdForUpdate(1L)).willReturn(Optional.of(order));
 
         // when
         OrderResponseDto response = orderService.updateOrderStatus(1L, requestDto);
 
         // then
+        verify(orderRepository).findByIdForUpdate(1L);
         assertThat(response.status()).isEqualTo(OrderStatus.PREPARING);
     }
 
@@ -296,7 +379,7 @@ class OrderServiceTest {
                 ""
         );
 
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdForUpdate(1L)).willReturn(Optional.of(order));
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -318,7 +401,7 @@ class OrderServiceTest {
                 "1234567890"
         );
 
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdForUpdate(1L)).willReturn(Optional.of(order));
 
         // when
         OrderResponseDto response = orderService.updateOrderStatus(1L, requestDto);
@@ -340,7 +423,7 @@ class OrderServiceTest {
                 "1234567890"
         );
 
-        given(orderRepository.findById(1L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdForUpdate(1L)).willReturn(Optional.of(order));
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)

@@ -347,12 +347,13 @@ class ControllerIntegrationTest {
         // when & then
         mockMvc.perform(post("/api/cart")
                         .with(memberAuthentication())
+                        .header("Idempotency-Key", "cart-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("장바구니 상품 담기 성공"));
 
-        verify(cartService).addCartItem(eq("member@example.com"), any());
+        verify(cartService).addCartItem(eq("member@example.com"), any(), eq("cart-idempotency-key"));
     }
 
     @Test
@@ -396,12 +397,13 @@ class ControllerIntegrationTest {
         // when & then
         mockMvc.perform(post("/api/orders")
                         .with(memberAuthentication())
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("주문 생성 성공"));
 
-        verify(orderService).createOrder(eq("member@example.com"), any());
+        verify(orderService).createOrder(eq("member@example.com"), any(), eq("test-idempotency-key"));
     }
 
     @Test
@@ -433,12 +435,13 @@ class ControllerIntegrationTest {
         // when & then
         mockMvc.perform(patch("/api/orders/{orderId}/cancel", 1L)
                         .with(memberAuthentication())
+                        .header("Idempotency-Key", "cancel-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("주문 취소 성공"));
 
-        verify(orderCancelService).cancelMyOrder("member@example.com", 1L, "단순 변심");
+        verify(orderCancelService).cancelMyOrder("member@example.com", 1L, "단순 변심", "cancel-key");
     }
 
     @Test
@@ -510,12 +513,13 @@ class ControllerIntegrationTest {
         // when & then
         mockMvc.perform(post("/api/payments/confirm")
                         .with(memberAuthentication())
+                        .header("Idempotency-Key", "payment-confirm-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(request))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("결제 승인 성공"));
 
-        verify(paymentService).confirmPayment(any());
+        verify(paymentService).confirmPayment(eq("member@example.com"), any(), eq("payment-confirm-key"));
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.earthy.shop.domain.cart.service;
 
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
+import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.enums.AddonType;
 import com.earthy.shop.domain.addon.service.AddonService;
@@ -30,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,6 +49,9 @@ class CartServiceTest {
 
     @Mock
     private AddonService addonService;
+
+    @Mock
+    private IdempotencyService idempotencyService;
 
     @InjectMocks
     private CartService cartService;
@@ -68,13 +74,84 @@ class CartServiceTest {
         given(cartItemRepository.save(any(CartItem.class))).willReturn(savedCartItem);
 
         // when
-        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto);
+        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key");
 
         // then
         verify(productService).validateStock(1L, 2);
         verify(cartItemRepository).save(any(CartItem.class));
+        verify(idempotencyService).complete(any(), any(), any());
         assertThat(response.items()).hasSize(1);
         assertThat(response.totalPrice()).isEqualTo(7000);
+    }
+
+    @Test
+    void 장바구니_담기_멱등성_키가_없으면_예외가_발생한다() {
+        // given
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto, ""))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REQUIRED)
+                );
+    }
+
+    @Test
+    void 완료된_장바구니_담기_요청이면_수량을_다시_증가시키지_않고_현재_장바구니를_반환한다() {
+        // given
+        Member member = member();
+        Product product = product(10);
+        CartItem cartItem = cartItem(member, product, null, 2, 0);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        IdempotencyKey completedKey = new IdempotencyKey(
+                "test@example.com",
+                "cart-idempotency-key",
+                "/api/cart"
+        );
+        completedKey.complete(null, "장바구니 상품 담기 성공");
+
+        given(idempotencyService.find("test@example.com", "cart-idempotency-key", "/api/cart"))
+                .willReturn(completedKey);
+        given(memberService.getActiveMember("test@example.com")).willReturn(member);
+        given(cartItemRepository.findByMember(member)).willReturn(List.of(cartItem));
+
+        // when
+        CartResponseDto response = cartService.addCartItem(
+                "test@example.com",
+                requestDto,
+                "cart-idempotency-key"
+        );
+
+        // then
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().quantity()).isEqualTo(2);
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+    }
+
+    @Test
+    void 처리중인_장바구니_담기_요청이면_중복_요청_예외가_발생한다() {
+        // given
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        IdempotencyKey processingKey = new IdempotencyKey(
+                "test@example.com",
+                "cart-idempotency-key",
+                "/api/cart"
+        );
+
+        given(idempotencyService.find("test@example.com", "cart-idempotency-key", "/api/cart"))
+                .willReturn(processingKey);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> cartService.addCartItem(
+                        "test@example.com",
+                        requestDto,
+                        "cart-idempotency-key"
+                ))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING)
+                );
     }
 
     @Test
@@ -94,7 +171,7 @@ class CartServiceTest {
                 .willReturn(List.of(cartItem));
 
         // when
-        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto);
+        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key");
 
         // then
         verify(productService).validateStock(1L, 3);
@@ -116,7 +193,7 @@ class CartServiceTest {
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto))
+                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.INVALID_QUANTITY)
                 );
@@ -142,7 +219,7 @@ class CartServiceTest {
         given(cartItemRepository.save(any(CartItem.class))).willReturn(savedCartItem);
 
         // when
-        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto);
+        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key");
 
         // then
         verify(productService).validateStock(1L, 1);
@@ -174,7 +251,7 @@ class CartServiceTest {
         given(cartItemRepository.save(any(CartItem.class))).willReturn(savedCartItem);
 
         // when
-        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto);
+        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key");
 
         // then
         verify(cartItemRepository).save(any(CartItem.class));
@@ -300,7 +377,7 @@ class CartServiceTest {
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
-                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto))
+                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key"))
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUT_OF_STOCK)
                 );

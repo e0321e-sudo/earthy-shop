@@ -54,6 +54,15 @@ import "./admin.css";
 
 type AdminTab = "dashboard" | "products" | "addons" | "orders" | "customers" | "notices" | "boards" | "password";
 
+// 멱등성 키 생성
+function createIdempotencyKey() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `admin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 const PRODUCT_CATEGORIES: Array<{ value: ProductCategory; label: string }> = [
   { value: "POSTCARD", label: "엽서" },
   { value: "POSTER", label: "포스터" },
@@ -662,7 +671,7 @@ function OrdersPanel({
     setError("");
 
     try {
-      const updated = await cancelAdminOrder(orderId, cancelReason);
+      const updated = await cancelAdminOrder(orderId, cancelReason, createIdempotencyKey());
       setSelectedOrder(updated);
       setNotice("주문이 취소되었습니다.");
       await loadOrders(currentPage);
