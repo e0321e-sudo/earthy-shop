@@ -4354,24 +4354,123 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   );
 }
 
+const ABOUT_ARCHIVE_IMAGES = [
+  {
+    src: "/assets/about-panorama/panorama-01.jpeg",
+    size: "is-medium",
+    ratio: "is-ratio-wide",
+    offset: "is-offset-high",
+    date: "AUGUST, 2026",
+    caption: "A MOMENT WE KEPT",
+  },
+  {
+    src: "/assets/about-panorama/panorama-02.jpeg",
+    size: "is-wide",
+    ratio: "is-ratio-cinema",
+    offset: "is-offset-low",
+    date: "SUMMER LIGHT",
+    caption: "SLOW ARCHIVE",
+  },
+  {
+    src: "/assets/about-panorama/panorama-04.jpeg",
+    size: "is-medium",
+    ratio: "is-ratio-wide",
+    offset: "is-offset-low",
+    date: "FLOWER FIELD",
+    caption: "COLOR KEPT",
+  },
+  {
+    src: "/assets/about-panorama/panorama-05.jpeg",
+    size: "is-wide",
+    ratio: "is-ratio-cinema",
+    offset: "is-offset-high",
+    date: "QUIET SHADE",
+    caption: "FOREST FRAME",
+  },
+  {
+    src: "/assets/about-panorama/panorama-08.jpeg",
+    size: "is-medium",
+    ratio: "is-ratio-wide",
+    offset: "is-offset-low",
+    date: "COAST MEMORY",
+    caption: "SEASON RECORD",
+  },
+  {
+    src: "/assets/about-panorama/panorama-09.jpeg",
+    size: "is-wide",
+    ratio: "is-ratio-cinema",
+    offset: "is-offset-high",
+    date: "WIND HILL",
+    caption: "EARTHY ARCHIVE",
+  },
+  {
+    src: "/assets/about-panorama/panorama-10.jpeg",
+    size: "is-narrow",
+    ratio: "is-ratio-classic",
+    offset: "is-offset-low",
+    date: "GREENHOUSE",
+    caption: "TENDER DETAIL",
+  },
+  {
+    src: "/assets/about-panorama/panorama-11.jpeg",
+    size: "is-wide",
+    ratio: "is-ratio-wide",
+    offset: "is-offset-high",
+    date: "TREE LINE",
+    caption: "STILL AFTERNOON",
+  },
+];
+
 function About() {
+  const archiveFlowImages = [...ABOUT_ARCHIVE_IMAGES, ...ABOUT_ARCHIVE_IMAGES];
+
   return (
-    <section className="page-view about-view">
-      <div>
-        <span>ABOUT US</span>
-        <h1>
-          Nature, remembered.
+    <section className="page-view about-page">
+      <div className="about-view">
+        <div>
+          <span>01 / ABOUT EARTHY</span>
+          <h1>
+            Nature,
+            <br />
+            remembered.
+            <br />
+            자연을 오래 간직하는 방법.
+          </h1>
+        </div>
+        <p>
+          계절이 지나면 다시 만날 수 없는 풍경, 바람의 결, 빛의 온도, 숲의 숨결을 사진으로 담아
+          엽서와 포스터, 포토북으로 전합니다.
           <br />
-          자연을 오래 간직하는 방법.
-        </h1>
+          <br />
+          자연을 오래 곁에 두는 가장 작은 방법 EARTHY.
+        </p>
       </div>
-      <p>
-        계절이 지나면 다시 만날 수 없는 풍경, 바람의 결, 빛의 온도, 숲의 숨결을 사진으로 담아
-        엽서와 포스터, 포토북으로 전합니다.
-        <br />
-        <br />
-        자연을 오래 곁에 두는 가장 작은 방법 EARTHY.
-      </p>
+
+      <div className="about-archive" aria-label="EARTHY 풍경 사진 아카이브">
+        <div className="about-archive-window">
+          <div className="about-archive-track photo-track">
+            {archiveFlowImages.map((image, index) => (
+              <figure
+                aria-hidden={index >= ABOUT_ARCHIVE_IMAGES.length}
+                className={`about-archive-item ${image.size} ${image.ratio} ${image.offset}`}
+                key={`${image.src}-${index}`}
+              >
+                <div className="about-archive-image-frame">
+                  <img
+                    src={image.src}
+                    alt={index >= ABOUT_ARCHIVE_IMAGES.length ? "" : `EARTHY 아카이브 사진 ${index + 1}`}
+                  />
+                </div>
+                <figcaption>
+                  <span>{String((index % ABOUT_ARCHIVE_IMAGES.length) + 1).padStart(2, "0")} / EARTHY ARCHIVE</span>
+                  <span>{image.date}</span>
+                  <span>{image.caption}</span>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
