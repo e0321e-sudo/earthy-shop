@@ -8,6 +8,7 @@ import com.earthy.shop.domain.addon.dto.response.AdminAddonResponseDto;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.enums.AddonType;
 import com.earthy.shop.domain.addon.repository.AddonRepository;
+import com.earthy.shop.domain.cart.repository.CartItemAddonRepository;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
 import com.earthy.shop.support.TestEntityUtils;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,9 @@ class AddonServiceTest {
 
     @Mock
     private CartItemRepository cartItemRepository;
+
+    @Mock
+    private CartItemAddonRepository cartItemAddonRepository;
 
     @InjectMocks
     private AddonService addonService;
@@ -169,6 +173,7 @@ class AddonServiceTest {
         addonService.deleteAddon(1L);
 
         // then
+        verify(cartItemAddonRepository).deleteByAddon(addon);
         verify(cartItemRepository).deleteByAddon(addon);
         assertThat(addon.isDeleted()).isTrue();
         assertThat(addon.isActive()).isFalse();

@@ -14,6 +14,9 @@ public enum ErrorCode {
 
     // 상품
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_NOT_FOUND", "해당 상품을 찾을 수 없습니다."),
+    PRODUCT_SIZE_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "PRODUCT_SIZE_OPTION_NOT_FOUND", "상품 사이즈 옵션을 찾을 수 없습니다."),
+    PRODUCT_SIZE_OPTION_REQUIRED(HttpStatus.BAD_REQUEST, "PRODUCT_SIZE_OPTION_REQUIRED", "포스터 상품은 사이즈 옵션이 필요합니다."),
+    INVALID_PRODUCT_SIZE_OPTION(HttpStatus.BAD_REQUEST, "INVALID_PRODUCT_SIZE_OPTION", "상품 사이즈 옵션 입력값이 올바르지 않습니다."),
 
     // 추가상품
     ADDON_NOT_FOUND(HttpStatus.NOT_FOUND, "ADDON_NOT_FOUND", "해당 추가상품을 찾을 수 없습니다."),
@@ -44,6 +47,7 @@ public enum ErrorCode {
     // 주문
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "주문을 찾을 수 없습니다."),
     ORDER_NOT_CANCELABLE(HttpStatus.BAD_REQUEST, "ORDER_NOT_CANCELABLE", "취소할 수 없는 주문 상태입니다."),
+    ORDER_CANCEL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "ORDER_CANCEL_REASON_REQUIRED", "취소 사유를 입력해주세요."),
     INVALID_ORDER_STATUS_CHANGE(HttpStatus.BAD_REQUEST, "INVALID_ORDER_STATUS_CHANGE", "변경할 수 없는 주문 상태입니다."),
     SHIPPING_INFO_REQUIRED(HttpStatus.BAD_REQUEST, "SHIPPING_INFO_REQUIRED", "배송 정보는 필수입니다."),
 
@@ -73,6 +77,12 @@ public enum ErrorCode {
     // 이메일
     EMAIL_CONFIG_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL_CONFIG_NOT_FOUND", "이메일 발송 설정이 필요합니다."),
     EMAIL_SEND_FAILED(HttpStatus.BAD_REQUEST, "EMAIL_SEND_FAILED", "이메일 발송에 실패했습니다."),
+
+    // 이미지
+    IMAGE_CONFIG_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "IMAGE_CONFIG_NOT_FOUND", "이미지 업로드 설정이 필요합니다."),
+    INVALID_IMAGE_FILE(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_FILE", "jpg, png, webp 이미지만 업로드할 수 있습니다."),
+    IMAGE_FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "IMAGE_FILE_TOO_LARGE", "이미지는 최대 5MB까지 업로드할 수 있습니다."),
+    IMAGE_UPLOAD_FAILED(HttpStatus.BAD_REQUEST, "IMAGE_UPLOAD_FAILED", "이미지 업로드에 실패했습니다."),
 
     // 멱등성
     IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED", "멱등성 키가 필요합니다."),

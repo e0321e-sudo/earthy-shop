@@ -379,6 +379,27 @@ class ControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("장바구니 추가상품 수량 변경 API")
+    void updateCartAddonQuantity() throws Exception {
+        // given
+        String request = """
+                {
+                  "quantity": 2
+                }
+                """;
+
+        // when & then
+        mockMvc.perform(patch("/api/cart/{cartItemId}/addons/{cartItemAddonId}", 1L, 2L)
+                        .with(memberAuthentication())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("장바구니 추가상품 수량 변경 성공"));
+
+        verify(cartService).updateAddonQuantity(eq("member@example.com"), eq(1L), eq(2L), any());
+    }
+
+    @Test
     @DisplayName("주문 생성 API")
     void createOrder() throws Exception {
         // given

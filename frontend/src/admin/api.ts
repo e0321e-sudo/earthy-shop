@@ -26,7 +26,7 @@ export interface AdminLoginResponse {
 }
 
 export type ProductCategory = "POSTCARD" | "POSTER" | "ETC";
-export type AddonType = "FRAME";
+export type AddonType = "FRAME" | "PREMIUM_FRAME" | "BASIC_FRAME";
 export type OrderStatus = "PENDING" | "PAID" | "PREPARING" | "SHIPPED" | "DELIVERED" | "CANCELED";
 export type MemberStatusFilter = "ALL" | "ACTIVE" | "INACTIVE";
 export type NoticeVisibilityFilter = "ALL" | "PUBLIC" | "PRIVATE";
@@ -44,9 +44,27 @@ export interface AdminProduct {
   detailImageUrl: string | null;
   description: string;
   stockQuantity: number;
+  sizeOptions: ProductSizeOption[];
   active: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProductSizeOption {
+  id: number;
+  sizeName: string;
+  additionalPrice: number;
+  stockQuantity: number;
+  active: boolean;
+  soldOut: boolean;
+}
+
+export interface ProductSizeOptionSaveRequest {
+  id?: number;
+  sizeName: string;
+  additionalPrice: number;
+  stockQuantity: number;
+  active: boolean;
 }
 
 export interface ProductSaveRequest {
@@ -57,6 +75,11 @@ export interface ProductSaveRequest {
   detailImageUrl: string;
   description: string;
   stockQuantity: number;
+  sizeOptions: ProductSizeOptionSaveRequest[];
+}
+
+export interface ImageUploadResponse {
+  imageUrl: string;
 }
 
 export interface AdminAddon {
@@ -84,10 +107,22 @@ export interface OrderItem {
   productName: string;
   productImageUrl: string;
   productPrice: number;
+  sizeOptionId: number | null;
+  sizeName: string | null;
+  sizeAdditionalPrice: number;
+  productUnitPrice: number;
   addonId: number | null;
   addonName: string | null;
   addonPrice: number;
   addonQuantity: number;
+  addons: Array<{
+    orderItemAddonId: number;
+    addonId: number;
+    addonName: string;
+    addonPrice: number;
+    quantity: number;
+    totalPrice: number;
+  }>;
   quantity: number;
   itemTotalPrice: number;
 }
@@ -112,6 +147,7 @@ export interface AdminOrder {
   createdAt: string;
   carrier: string | null;
   trackingNumber: string | null;
+  cancelReason: string | null;
 }
 
 export interface AdminMember {
@@ -213,7 +249,7 @@ async function fetchWithAdminAuth(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
   const accessToken = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
 
-  if (!headers.has("Content-Type") && options.body) {
+  if (!headers.has("Content-Type") && options.body && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -367,6 +403,33 @@ export function activateAdminProduct(productId: number) {
 export function deleteAdminProduct(productId: number) {
   return adminRequest<void>(`/api/admin/products/${productId}`, {
     method: "DELETE",
+  });
+}
+
+export function uploadAdminProductImage(file: File) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  return adminRequest<ImageUploadResponse>("/api/admin/images/products", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function uploadAdminProductDetailImage(file: File) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  return adminRequest<ImageUploadResponse>("/api/admin/images/products/detail", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function deleteAdminImage(imageUrl: string) {
+  return adminRequest<void>("/api/admin/images", {
+    method: "DELETE",
+    body: JSON.stringify({ imageUrl }),
   });
 }
 

@@ -9,10 +9,13 @@ import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
 import com.earthy.shop.domain.order.entity.Order;
 import com.earthy.shop.domain.order.entity.OrderItem;
+import com.earthy.shop.domain.order.entity.OrderItemAddon;
 import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.payment.service.PaymentService;
 import com.earthy.shop.domain.product.service.ProductService;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import com.earthy.shop.support.TestEntityUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -40,10 +43,16 @@ class OrderCancelServiceTest {
     private ProductService productService;
 
     @Mock
+    private ProductSizeOptionService productSizeOptionService;
+
+    @Mock
     private AddonService addonService;
 
     @Mock
     private IdempotencyService idempotencyService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private OrderCancelService orderCancelService;
@@ -57,11 +66,11 @@ class OrderCancelServiceTest {
         given(orderService.findMyOrderForUpdate("test@example.com", 1L)).willReturn(order);
 
         // when
-        OrderResponseDto response = orderCancelService.cancelMyOrder("test@example.com", 1L, "", "cancel-key");
+        OrderResponseDto response = orderCancelService.cancelMyOrder("test@example.com", 1L, "단순 변심", "cancel-key");
 
         // then
         verify(orderService).findMyOrderForUpdate("test@example.com", 1L);
-        verify(paymentService).cancelPayment(order, "고객 요청으로 인한 주문 취소");
+        verify(paymentService).cancelPayment(order, "단순 변심");
         verify(productService).increaseStock(1L, 1);
         verify(addonService).increaseStock(1L, 1);
         assertThat(response.status()).isEqualTo(OrderStatus.CANCELED);
@@ -71,7 +80,7 @@ class OrderCancelServiceTest {
     void 완료된_주문취소_요청이면_기존_주문결과를_반환한다() {
         // given
         Order order = order();
-        order.cancel();
+        order.cancel("단순 변심");
         IdempotencyKey completedKey = new IdempotencyKey(
                 "test@example.com",
                 "cancel-key",
@@ -134,20 +143,21 @@ class OrderCancelServiceTest {
     }
 
     @Test
-    void 주문대기_주문은_결제취소와_재고복구_없이_취소한다() {
+    void 고객은_주문대기_주문을_취소할_수_없다() {
         // given
         Order order = order();
 
         given(orderService.findMyOrderForUpdate("test@example.com", 1L)).willReturn(order);
 
-        // when
-        OrderResponseDto response = orderCancelService.cancelMyOrder("test@example.com", 1L, "단순 변심", "cancel-key");
-
-        // then
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> orderCancelService.cancelMyOrder("test@example.com", 1L, "단순 변심", "cancel-key"))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_NOT_CANCELABLE)
+                );
         verify(paymentService, never()).cancelPayment(order, "단순 변심");
         verify(productService, never()).increaseStock(1L, 1);
         verify(addonService, never()).increaseStock(1L, 1);
-        assertThat(response.status()).isEqualTo(OrderStatus.CANCELED);
     }
 
     @Test
@@ -170,19 +180,20 @@ class OrderCancelServiceTest {
     }
 
     @Test
-    void 관리자가_취소사유_없이_취소하면_관리자_기본사유를_사용한다() {
+    void 관리자가_취소사유_없이_취소하면_예외가_발생한다() {
         // given
         Order order = order();
         order.pay("카드");
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
 
-        // when
-        orderCancelService.cancelAdminOrder(1L, null, "admin-cancel-key");
-
-        // then
-        verify(orderService).getOrderForUpdate(1L);
-        verify(paymentService).cancelPayment(order, "관리자 요청으로 인한 주문 취소");
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> orderCancelService.cancelAdminOrder(1L, null, "admin-cancel-key"))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_CANCEL_REASON_REQUIRED)
+                );
+        verify(paymentService, never()).cancelPayment(order, "관리자 요청으로 인한 주문 취소");
     }
 
     @Test
@@ -199,6 +210,25 @@ class OrderCancelServiceTest {
         // then
         verify(productService).increaseStock(1L, 1);
         verify(addonService, never()).increaseStock(1L, 1);
+    }
+
+    @Test
+    void 포스터_사이즈와_복수_추가상품_주문_취소_시_각각_재고를_복구한다() {
+        // given
+        Order order = posterOrderWithMultipleAddons();
+        order.pay("카드");
+
+        given(orderService.findMyOrderForUpdate("test@example.com", 1L)).willReturn(order);
+
+        // when
+        orderCancelService.cancelMyOrder("test@example.com", 1L, "배송 전 취소", "cancel-key");
+
+        // then
+        verify(paymentService).cancelPayment(order, "배송 전 취소");
+        verify(productSizeOptionService).increaseStock(10L, 2);
+        verify(productService, never()).increaseStock(1L, 2);
+        verify(addonService).increaseStock(100L, 1);
+        verify(addonService).increaseStock(200L, 2);
     }
 
     @Test
@@ -282,6 +312,48 @@ class OrderCancelServiceTest {
                 0,
                 1
         ));
+
+        return order;
+    }
+
+    private Order posterOrderWithMultipleAddons() {
+        Member member = new Member("test@example.com", "encodedPassword", "홍길동", "010-1234-5678");
+        TestEntityUtils.setId(member, 1L);
+
+        Order order = new Order(
+                "ORD-20260728-ABC12345",
+                member,
+                "홍길동",
+                "010-1234-5678",
+                "51100",
+                "경남 창원시 소답동",
+                "711호",
+                "문 앞에 놓아주세요",
+                52000,
+                2500,
+                0
+        );
+        TestEntityUtils.setId(order, 1L);
+        TestEntityUtils.setField(order, "createdAt", LocalDateTime.of(2026, 7, 28, 1, 0));
+
+        OrderItem orderItem = new OrderItem(
+                1L,
+                "Field of Red",
+                "/assets/products/field-of-red.jpeg",
+                8000,
+                10L,
+                "A2",
+                4000,
+                12000,
+                null,
+                null,
+                0,
+                0,
+                2
+        );
+        orderItem.addOrderItemAddon(new OrderItemAddon(100L, "월넛 액자 A2", 30000, 1));
+        orderItem.addOrderItemAddon(new OrderItemAddon(200L, "내추럴 액자 A2", 20000, 2));
+        order.addOrderItem(orderItem);
 
         return order;
     }

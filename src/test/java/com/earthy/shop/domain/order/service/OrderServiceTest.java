@@ -134,7 +134,6 @@ class OrderServiceTest {
         // given
         Member member = member();
         Order order = savedOrder(order(member, 3500, 2500, 0));
-        order.pay("카드");
 
         IdempotencyKey completedKey = new IdempotencyKey(
                 "test@example.com",
@@ -146,7 +145,7 @@ class OrderServiceTest {
         given(idempotencyService.find("test@example.com", "test-idempotency-key", "/api/orders"))
                 .willReturn(completedKey);
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
-        given(orderRepository.findByIdAndMemberAndStatusNot(1L, member, OrderStatus.PENDING))
+        given(orderRepository.findByIdAndMember(1L, member))
                 .willReturn(Optional.of(order));
 
         // when
@@ -158,7 +157,7 @@ class OrderServiceTest {
 
         // then
         assertThat(response.orderId()).isEqualTo(1L);
-        assertThat(response.status()).isEqualTo(OrderStatus.PAID);
+        assertThat(response.status()).isEqualTo(OrderStatus.PENDING);
         verify(idempotencyService, never()).create(any(), any(), any());
         verify(orderRepository, never()).save(any(Order.class));
     }
@@ -456,10 +455,15 @@ class OrderServiceTest {
                 "sunset sea postcard",
                 "/assets/products/sunset-sea.jpeg",
                 productPrice,
+                null,
+                null,
+                0,
+                productPrice,
                 addonId,
                 addonId == null ? null : "A3 원목 액자",
                 addonPrice,
                 addonQuantity,
+                List.of(),
                 quantity,
                 totalPrice
         );

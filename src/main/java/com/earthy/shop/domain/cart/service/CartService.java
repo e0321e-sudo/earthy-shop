@@ -7,20 +7,29 @@ import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.dto.request.CartItemAddRequestDto;
+import com.earthy.shop.domain.cart.dto.request.CartItemAddonQuantityUpdateRequestDto;
+import com.earthy.shop.domain.cart.dto.request.CartItemAddonRequestDto;
 import com.earthy.shop.domain.cart.dto.request.CartItemQuantityUpdateRequestDto;
 import com.earthy.shop.domain.cart.dto.response.CartItemResponseDto;
 import com.earthy.shop.domain.cart.dto.response.CartResponseDto;
 import com.earthy.shop.domain.cart.entity.CartItem;
+import com.earthy.shop.domain.cart.entity.CartItemAddon;
+import com.earthy.shop.domain.cart.repository.CartItemAddonRepository;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.member.service.MemberService;
 import com.earthy.shop.domain.product.entity.Product;
+import com.earthy.shop.domain.product.entity.ProductSizeOption;
+import com.earthy.shop.domain.product.enums.ProductCategory;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import com.earthy.shop.domain.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 // 장바구니 서비스
@@ -30,8 +39,10 @@ import java.util.Objects;
 public class CartService {
 
     private final CartItemRepository cartItemRepository;
+    private final CartItemAddonRepository cartItemAddonRepository;
     private final MemberService memberService;
     private final ProductService productService;
+    private final ProductSizeOptionService productSizeOptionService;
     private final AddonService addonService;
     private final IdempotencyService idempotencyService;
 
@@ -109,43 +120,49 @@ public class CartService {
         // 요청 상품 조회
         Product product = productService.getActiveProduct(requestDto.getProductId());
 
-        Addon addon = null;
+        // 포스터 사이즈 옵션 조회
+        ProductSizeOption productSizeOption = resolveProductSizeOption(
+                product,
+                requestDto.getProductSizeOptionId()
+        );
 
-        // 요청 추가상품 조회
-        if (requestDto.getAddonId() != null) {
-            addon = addonService.getActiveAddon(requestDto.getAddonId());
-        }
+        // 요청 추가상품 목록 조회
+        Map<Addon, Integer> requestedAddons = resolveRequestedAddons(requestDto);
 
-        // 추가상품 수량 검증
-        int addonQuantity = resolveAddonQuantity(addon, requestDto.getAddonQuantity());
-
-        // 동일 상품 장바구니 항목 조회
-        CartItem cartItem = cartItemRepository.findByMemberAndProductAndAddon(member, product, addon)
+        // 동일 상품/사이즈 장바구니 항목 조회
+        CartItem cartItem = cartItemRepository.findSameCartItems(member, product, productSizeOption)
+                .stream()
+                .findFirst()
                 .orElse(null);
 
-        // 현재 장바구니 수량을 포함한 재고 검증
-        validateCartStock(
+        // 현재 장바구니 수량을 포함한 상품 재고 검증
+        validateProductCartStock(
                 member,
                 product,
+                productSizeOption,
                 cartItem == null ? requestDto.getQuantity() : cartItem.getQuantity() + requestDto.getQuantity(),
-                addon,
-                cartItem == null ? addonQuantity : cartItem.getAddonQuantity() + addonQuantity,
                 cartItem
         );
 
+        // 현재 장바구니 수량을 포함한 추가상품 재고 검증
+        validateAddonCartStock(member, requestedAddons, null);
+
         if (cartItem == null) {
             // 신규 장바구니 항목 생성
-            cartItemRepository.save(new CartItem(
+            cartItem = cartItemRepository.save(new CartItem(
                     member,
                     product,
-                    addon,
+                    productSizeOption,
+                    null,
                     requestDto.getQuantity(),
-                    addonQuantity
+                    0
             ));
         } else {
             // 기존 장바구니 항목 수량 증가
-            cartItem.increaseQuantity(requestDto.getQuantity(), addonQuantity);
+            cartItem.increaseQuantity(requestDto.getQuantity(), 0);
         }
+
+        requestedAddons.forEach(cartItem::addOrIncreaseAddon);
 
         return getCart(email);
     }
@@ -164,21 +181,50 @@ public class CartService {
         CartItem cartItem = cartItemRepository.findByIdAndMember(cartItemId, member)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
 
-        // 추가상품 수량 검증
-        int addonQuantity = resolveUpdateAddonQuantity(cartItem, requestDto.getAddonQuantity());
-
         // 변경 후 장바구니 수량 기준 재고 검증
-        validateCartStock(
+        validateProductCartStock(
                 member,
                 cartItem.getProduct(),
+                cartItem.getProductSizeOption(),
                 requestDto.getQuantity(),
-                cartItem.getAddon(),
-                addonQuantity,
                 cartItem
         );
 
         // 장바구니 항목 수량 변경
-        cartItem.updateQuantity(requestDto.getQuantity(), addonQuantity);
+        cartItem.updateQuantity(requestDto.getQuantity(), cartItem.getAddonQuantity());
+
+        return getCart(email);
+    }
+
+    // 장바구니 추가상품 수량 변경
+    @Transactional
+    public CartResponseDto updateAddonQuantity(
+            String email,
+            Long cartItemId,
+            Long cartItemAddonId,
+            CartItemAddonQuantityUpdateRequestDto requestDto
+    ) {
+        // 요청 회원 조회
+        Member member = memberService.getActiveMember(email);
+
+        // 요청 회원의 장바구니 항목 조회
+        CartItem cartItem = cartItemRepository.findByIdAndMember(cartItemId, member)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
+
+        // 요청 장바구니 추가상품 조회
+        CartItemAddon cartItemAddon = cartItemAddonRepository.findByIdAndCartItem(cartItemAddonId, cartItem)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CART_ITEM_NOT_FOUND));
+
+        if (requestDto.getQuantity() > 0) {
+            validateAddonCartStock(
+                    member,
+                    Map.of(cartItemAddon.getAddon(), requestDto.getQuantity()),
+                    cartItemAddon
+            );
+        }
+
+        // 추가상품 수량 변경, 0이면 장바구니 추가상품 제거
+        cartItem.updateCartItemAddonQuantity(cartItemAddon, requestDto.getQuantity());
 
         return getCart(email);
     }
@@ -225,83 +271,168 @@ public class CartService {
         }
     }
 
-    // 추가상품 수량 계산
-    private int resolveAddonQuantity(Addon addon, Integer addonQuantity) {
-        // 추가상품 미선택
-        if (addon == null) {
-            return 0;
+    // 요청 추가상품 목록 조회
+    private Map<Addon, Integer> resolveRequestedAddons(CartItemAddRequestDto requestDto) {
+        Map<Long, Integer> addonQuantities = new LinkedHashMap<>();
+
+        // 복수 추가상품 요청이 있으면 실제 요청 배열만 검증 대상으로 사용
+        if (requestDto.getAddons() != null) {
+            for (CartItemAddonRequestDto addonRequestDto : requestDto.getAddons()) {
+                addonQuantities.merge(addonRequestDto.getAddonId(), addonRequestDto.getQuantity(), Integer::sum);
+            }
+        } else if (requestDto.getAddonId() != null) {
+            // 기존 단일 추가상품 요청은 복수 구조 이전 호환용으로만 처리
+            int addonQuantity = requestDto.getAddonQuantity() == null ? 1 : requestDto.getAddonQuantity();
+            addonQuantities.merge(requestDto.getAddonId(), addonQuantity, Integer::sum);
         }
 
-        // 추가상품 선택 후 수량 미입력
-        if (addonQuantity == null) {
-            return 1;
+        Map<Addon, Integer> requestedAddons = new LinkedHashMap<>();
+
+        for (Map.Entry<Long, Integer> entry : addonQuantities.entrySet()) {
+            if (entry.getValue() < 1) {
+                throw new BusinessException(ErrorCode.INVALID_QUANTITY);
+            }
+
+            Addon addon = addonService.getActiveAddon(entry.getKey());
+            requestedAddons.put(addon, entry.getValue());
         }
 
-        // 추가상품 수량 오류
-        if (addonQuantity < 1) {
-            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
-        }
-
-        return addonQuantity;
+        return requestedAddons;
     }
 
-    // 추가상품 변경 수량 계산
-    private int resolveUpdateAddonQuantity(CartItem cartItem, Integer addonQuantity) {
-        // 추가상품 없는 장바구니 항목
-        if (cartItem.getAddon() == null) {
-            return 0;
+    // 포스터 사이즈 옵션 계산
+    private ProductSizeOption resolveProductSizeOption(Product product, Long productSizeOptionId) {
+        // 포스터는 사이즈 선택 필수
+        if (product.getCategory() == ProductCategory.POSTER) {
+            if (productSizeOptionId == null) {
+                throw new BusinessException(ErrorCode.PRODUCT_SIZE_OPTION_REQUIRED);
+            }
+
+            return productSizeOptionService.getActiveOption(product, productSizeOptionId);
         }
 
-        // 추가상품 수량 미변경
-        if (addonQuantity == null) {
-            return cartItem.getAddonQuantity();
+        // 포스터가 아닌 상품은 사이즈 옵션을 사용하지 않음
+        if (productSizeOptionId != null) {
+            throw new BusinessException(ErrorCode.INVALID_PRODUCT_SIZE_OPTION);
         }
 
-        // 추가상품 수량 오류
-        if (addonQuantity < 1) {
-            throw new BusinessException(ErrorCode.INVALID_QUANTITY);
-        }
-
-        return addonQuantity;
+        return null;
     }
 
-    // 장바구니 전체 수량 기준 재고 검증
-    private void validateCartStock(
+    // 장바구니 전체 수량 기준 상품 재고 검증
+    private void validateProductCartStock(
             Member member,
             Product product,
+            ProductSizeOption productSizeOption,
             int productQuantity,
-            Addon addon,
-            int addonQuantity,
             CartItem targetCartItem
     ) {
         List<CartItem> cartItems = cartItemRepository.findByMember(member);
 
-        // 같은 상품이 다른 옵션으로 담긴 수량까지 합산
+        // 포스터는 같은 사이즈 옵션 수량만, 엽서는 같은 상품 수량만 합산
         int totalProductQuantity = cartItems.stream()
                 .filter(cartItem -> !isSameCartItem(cartItem, targetCartItem))
-                .filter(cartItem -> Objects.equals(cartItem.getProduct().getId(), product.getId()))
+                .filter(cartItem -> isSameProductStockGroup(cartItem, product, productSizeOption))
                 .mapToInt(CartItem::getQuantity)
                 .sum() + productQuantity;
 
-        productService.validateStock(product.getId(), totalProductQuantity);
+        validateProductStock(product, productSizeOption, totalProductQuantity);
+    }
 
-        if (addon == null) {
+    // 장바구니 전체 수량 기준 추가상품 재고 검증
+    private void validateAddonCartStock(
+            Member member,
+            Map<Addon, Integer> requestedAddons,
+            CartItemAddon targetCartItemAddon
+    ) {
+        if (requestedAddons.isEmpty()) {
             return;
         }
 
-        // 같은 추가상품이 다른 장바구니 항목에 담긴 수량까지 합산
-        int totalAddonQuantity = cartItems.stream()
-                .filter(cartItem -> !isSameCartItem(cartItem, targetCartItem))
-                .filter(cartItem -> cartItem.getAddon() != null)
-                .filter(cartItem -> Objects.equals(cartItem.getAddon().getId(), addon.getId()))
-                .mapToInt(CartItem::getAddonQuantity)
-                .sum() + addonQuantity;
+        List<CartItem> cartItems = cartItemRepository.findByMember(member);
 
-        addonService.validateStock(addon.getId(), totalAddonQuantity);
+        for (Map.Entry<Addon, Integer> entry : requestedAddons.entrySet()) {
+            Addon addon = entry.getKey();
+            int requestedQuantity = entry.getValue();
+
+            // 같은 추가상품이 장바구니 전체에 담긴 수량까지 합산
+            int totalAddonQuantity = cartItems.stream()
+                    .mapToInt(cartItem -> calculateCartAddonQuantity(cartItem, addon, targetCartItemAddon))
+                    .sum() + requestedQuantity;
+
+            addonService.validateStock(addon.getId(), totalAddonQuantity);
+        }
+    }
+
+    // 장바구니 항목에 담긴 특정 추가상품 수량 계산
+    private int calculateCartAddonQuantity(
+            CartItem cartItem,
+            Addon addon,
+            CartItemAddon targetCartItemAddon
+    ) {
+        int legacyAddonQuantity = 0;
+
+        if (cartItem.getAddon() != null && Objects.equals(cartItem.getAddon().getId(), addon.getId())) {
+            legacyAddonQuantity = cartItem.getAddonQuantity();
+        }
+
+        int multipleAddonQuantity = cartItem.getCartItemAddons()
+                .stream()
+                .filter(cartItemAddon -> !isSameCartItemAddon(cartItemAddon, targetCartItemAddon))
+                .filter(cartItemAddon -> Objects.equals(cartItemAddon.getAddon().getId(), addon.getId()))
+                .mapToInt(CartItemAddon::getQuantity)
+                .sum();
+
+        return legacyAddonQuantity + multipleAddonQuantity;
     }
 
     // 검증 대상 장바구니 항목 제외 여부
     private boolean isSameCartItem(CartItem cartItem, CartItem targetCartItem) {
         return targetCartItem != null && Objects.equals(cartItem.getId(), targetCartItem.getId());
+    }
+
+    // 검증 대상 장바구니 추가상품 제외 여부
+    private boolean isSameCartItemAddon(CartItemAddon cartItemAddon, CartItemAddon targetCartItemAddon) {
+        return targetCartItemAddon != null && Objects.equals(cartItemAddon.getId(), targetCartItemAddon.getId());
+    }
+
+    // 같은 재고를 공유하는 장바구니 항목인지 확인
+    private boolean isSameProductStockGroup(
+            CartItem cartItem,
+            Product product,
+            ProductSizeOption productSizeOption
+    ) {
+        if (!Objects.equals(cartItem.getProduct().getId(), product.getId())) {
+            return false;
+        }
+
+        if (product.getCategory() == ProductCategory.POSTER) {
+            return cartItem.getProductSizeOption() != null
+                    && productSizeOption != null
+                    && Objects.equals(cartItem.getProductSizeOption().getId(), productSizeOption.getId());
+        }
+
+        return cartItem.getProductSizeOption() == null;
+    }
+
+    // 상품 카테고리별 재고 검증
+    private void validateProductStock(
+            Product product,
+            ProductSizeOption productSizeOption,
+            int productQuantity
+    ) {
+        if (product.getCategory() == ProductCategory.POSTER) {
+            if (productSizeOption == null) {
+                throw new BusinessException(ErrorCode.PRODUCT_SIZE_OPTION_REQUIRED);
+            }
+
+            if (productSizeOption.getStockQuantity() < productQuantity) {
+                throw new BusinessException(ErrorCode.OUT_OF_STOCK);
+            }
+
+            return;
+        }
+
+        productService.validateStock(product.getId(), productQuantity);
     }
 }

@@ -1,4 +1,4 @@
-import { DragEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   AddonSaveRequest,
   AdminAddon,
@@ -13,6 +13,7 @@ import {
   NoticeVisibilityFilter,
   ProductCategory,
   ProductSaveRequest,
+  ProductSizeOptionSaveRequest,
   OrderStatus,
   activateAdminAddon,
   activateAdminProduct,
@@ -21,6 +22,7 @@ import {
   createAdminAddon,
   createAdminNotice,
   createAdminProduct,
+  deleteAdminImage,
   deactivateAdminAddon,
   deactivateAdminProduct,
   deleteAdminAddon,
@@ -49,6 +51,8 @@ import {
   updateAdminOrderStatus,
   updateAdminPassword,
   updateAdminProduct,
+  uploadAdminProductDetailImage,
+  uploadAdminProductImage,
 } from "./api";
 import "./admin.css";
 
@@ -69,7 +73,31 @@ const PRODUCT_CATEGORIES: Array<{ value: ProductCategory; label: string }> = [
   { value: "ETC", label: "기타" },
 ];
 
-const ADDON_TYPES: Array<{ value: AddonType; label: string }> = [{ value: "FRAME", label: "액자" }];
+const ADDON_TYPES: Array<{ value: AddonType; label: string }> = [
+  { value: "PREMIUM_FRAME", label: "프리미엄 액자" },
+  { value: "BASIC_FRAME", label: "베이직 액자" },
+];
+const LEGACY_ADDON_TYPE: { value: AddonType; label: string } = { value: "FRAME", label: "액자" };
+
+const ADMIN_CANCEL_REASON_OPTIONS = [
+  "재고 부족",
+  "상품 품절",
+  "배송 불가 지역",
+  "고객 요청",
+  "결제 오류",
+  "상품 문제",
+  "기타",
+];
+
+const LOW_STOCK_THRESHOLD = 0;
+const ADMIN_IMAGE_MAX_SIZE = 5 * 1024 * 1024;
+const ADMIN_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ADMIN_IMAGE_ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+type ProductImageField = "imageUrl" | "detailImageUrl";
+const emptyProductOriginalImageUrls: Record<ProductImageField, string> = {
+  imageUrl: "",
+  detailImageUrl: "",
+};
 
 const ORDER_STATUSES: Array<{ value: OrderStatus; label: string }> = [
   { value: "PAID", label: "결제 완료" },
@@ -110,11 +138,22 @@ const emptyProductForm: ProductSaveRequest = {
   detailImageUrl: "",
   description: "",
   stockQuantity: 0,
+  sizeOptions: [],
 };
+
+const createEmptySizeOption = (): ProductSizeOptionSaveRequest => ({
+  sizeName: "",
+  additionalPrice: 0,
+  stockQuantity: 0,
+  active: true,
+});
+
+const ensurePosterSizeOptions = (sizeOptions: ProductSizeOptionSaveRequest[]) =>
+  sizeOptions.length > 0 ? sizeOptions : [createEmptySizeOption()];
 
 const emptyAddonForm: AddonSaveRequest = {
   name: "",
-  type: "FRAME",
+  type: "PREMIUM_FRAME",
   price: 0,
   stockQuantity: 0,
 };
@@ -135,8 +174,55 @@ function formatWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
 }
 
+function formatOrderSizeOptionLabel(item: {
+  sizeName: string | null;
+  sizeAdditionalPrice: number;
+}) {
+  if (!item.sizeName) {
+    return null;
+  }
+
+  if (item.sizeAdditionalPrice === 0) {
+    return `사이즈: ${item.sizeName}`;
+  }
+
+  const pricePrefix = item.sizeAdditionalPrice > 0 ? "+" : "-";
+  const price = Math.abs(item.sizeAdditionalPrice).toLocaleString("ko-KR");
+
+  return `사이즈: ${item.sizeName} (${pricePrefix}${price}원)`;
+}
+
 function formatNumber(value: number) {
   return value.toLocaleString("ko-KR");
+}
+
+// 관리자 주문 상세 결제수단 표기
+function formatPaymentMethod(paymentMethod?: string | null) {
+  if (!paymentMethod) {
+    return "-";
+  }
+
+  const normalizedMethod = paymentMethod.replace(/[\s_-]/g, "").toUpperCase();
+
+  if (
+    normalizedMethod === "카드" ||
+    normalizedMethod === "카드결제" ||
+    normalizedMethod.includes("CARD") ||
+    normalizedMethod.includes("EASYPAY")
+  ) {
+    return "카드결제";
+  }
+
+  if (
+    normalizedMethod === "휴대폰" ||
+    normalizedMethod === "휴대폰결제" ||
+    normalizedMethod.includes("MOBILE") ||
+    normalizedMethod.includes("PHONE")
+  ) {
+    return "휴대폰결제";
+  }
+
+  return paymentMethod;
 }
 
 function formatDate(value: string) {
@@ -189,6 +275,8 @@ export default function AdminApp() {
   const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
   const [loginError, setLoginError] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [productsMenuKey, setProductsMenuKey] = useState(0);
+  const [addonsMenuKey, setAddonsMenuKey] = useState(0);
   const [ordersMenuKey, setOrdersMenuKey] = useState(0);
   const [noticesMenuKey, setNoticesMenuKey] = useState(0);
   const [boardsMenuKey, setBoardsMenuKey] = useState(0);
@@ -200,6 +288,12 @@ export default function AdminApp() {
 
   function changeTab(tab: AdminTab) {
     setActiveTab(tab);
+    if (tab === "products") {
+      setProductsMenuKey((current) => current + 1);
+    }
+    if (tab === "addons") {
+      setAddonsMenuKey((current) => current + 1);
+    }
     if (tab === "orders") {
       setOrdersMenuKey((current) => current + 1);
     }
@@ -325,9 +419,19 @@ export default function AdminApp() {
           />
         )}
         {activeTab === "products" && (
-          <ProductsPanel initialProduct={dashboardProductTarget} onInitialProductOpened={() => setDashboardProductTarget(null)} />
+          <ProductsPanel
+            menuKey={productsMenuKey}
+            initialProduct={dashboardProductTarget}
+            onInitialProductOpened={() => setDashboardProductTarget(null)}
+          />
         )}
-        {activeTab === "addons" && <AddonsPanel initialAddon={dashboardAddonTarget} onInitialAddonOpened={() => setDashboardAddonTarget(null)} />}
+        {activeTab === "addons" && (
+          <AddonsPanel
+            menuKey={addonsMenuKey}
+            initialAddon={dashboardAddonTarget}
+            onInitialAddonOpened={() => setDashboardAddonTarget(null)}
+          />
+        )}
         {activeTab === "customers" && <CustomersPanel />}
         {activeTab === "notices" && <NoticesPanel key={noticesMenuKey} />}
         {activeTab === "boards" && <BoardsPanel key={boardsMenuKey} />}
@@ -370,7 +474,7 @@ function AdminLoginPage({ error, onLogin }: { error: string; onLogin: (email: st
             autoComplete="current-password"
           />
         </label>
-        {error && <p className="admin-message is-error">{error}</p>}
+        <AdminErrorMessage message={error} />
         <button className="admin-primary-button" type="submit" disabled={submitting}>
           {submitting ? "로그인 중" : "로그인"}
         </button>
@@ -400,8 +504,8 @@ function DashboardPanel({
   const preparingOrders = orders.filter((order) => order.status === "PREPARING");
   const revenueOrders = orders.filter((order) => order.status !== "PENDING" && order.status !== "CANCELED");
   const totalRevenue = revenueOrders.reduce((sum, order) => sum + order.totalPrice, 0);
-  const lowStockProducts = products.filter((product) => product.active && product.stockQuantity <= 0);
-  const lowStockAddons = addons.filter((addon) => addon.active && addon.stockQuantity <= 0);
+  const lowStockProducts = products.filter(isLowStockProduct);
+  const lowStockAddons = addons.filter((addon) => addon.active && addon.stockQuantity <= LOW_STOCK_THRESHOLD);
   const lowStockCount = lowStockProducts.length + lowStockAddons.length;
 
   async function loadDashboard() {
@@ -460,7 +564,7 @@ function DashboardPanel({
         >
           <span>재고 보충 필요</span>
           <strong>{lowStockCount}</strong>
-          <small>재고 0개</small>
+          <small>부족 재고 기준</small>
         </button>
       </div>
 
@@ -546,7 +650,7 @@ function DashboardPanel({
                     <small>상품 / {product.categoryDescription}</small>
                   </span>
                   <span>
-                    <strong>{product.stockQuantity}개</strong>
+                    <strong>{formatDashboardProductStock(product)}</strong>
                     <small>재고 보충 필요</small>
                   </span>
                 </button>
@@ -569,6 +673,40 @@ function DashboardPanel({
       </div>
     </section>
   );
+}
+
+function isLowStockProduct(product: AdminProduct) {
+  if (!product.active) {
+    return false;
+  }
+
+  if (product.category !== "POSTER") {
+    return product.stockQuantity <= LOW_STOCK_THRESHOLD;
+  }
+
+  const activeSizeOptions = product.sizeOptions?.filter((option) => option.active) ?? [];
+
+  if (activeSizeOptions.length === 0) {
+    return true;
+  }
+
+  return activeSizeOptions.some((option) => option.stockQuantity <= LOW_STOCK_THRESHOLD);
+}
+
+function formatDashboardProductStock(product: AdminProduct) {
+  if (product.category !== "POSTER") {
+    return `${product.stockQuantity}개`;
+  }
+
+  const activeSizeOptions = product.sizeOptions?.filter((option) => option.active) ?? [];
+
+  if (activeSizeOptions.length === 0) {
+    return "활성 사이즈 없음";
+  }
+
+  return activeSizeOptions
+    .map((option) => `${option.sizeName} ${option.stockQuantity}`)
+    .join(" / ");
 }
 
 function OrdersPanel({
@@ -693,11 +831,10 @@ function OrdersPanel({
             </button>
           }
         />
-        <Feedback notice={notice} error={error} />
         <Toast message={notice} onClose={() => setNotice("")} />
         <h2 className="admin-section-title">주문 상세내역</h2>
         <div className="admin-order-detail-page">
-          <OrderDetail order={selectedOrder} onStatusUpdate={handleStatusUpdate} onCancel={handleCancel} />
+          <OrderDetail order={selectedOrder} error={error} onStatusUpdate={handleStatusUpdate} onCancel={handleCancel} />
         </div>
       </section>
     );
@@ -800,29 +937,44 @@ function OrdersPanel({
 
 function OrderDetail({
   order,
+  error,
   onStatusUpdate,
   onCancel,
 }: {
   order: AdminOrder;
+  error: string;
   onStatusUpdate: (orderId: number, status: OrderStatus, carrier: string, trackingNumber: string) => Promise<void>;
   onCancel: (orderId: number, cancelReason: string) => Promise<void>;
 }) {
   const [status, setStatus] = useState<OrderStatus>(order.status);
   const [carrier, setCarrier] = useState(order.carrier ?? "");
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber ?? "");
-  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonSelection, setCancelReasonSelection] = useState("");
+  const [customCancelReason, setCustomCancelReason] = useState("");
+  const [cancelReasonError, setCancelReasonError] = useState("");
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const canChangeStatus = Boolean(getNextOrderStatus(order.status));
   const selectedStatusLabel = ORDER_UPDATE_STATUSES.find((item) => item.value === status)?.label ?? status;
+
+  const openCancelModal = () => {
+    setCancelReasonSelection("");
+    setCustomCancelReason("");
+    setCancelReasonError("");
+    setCancelModalOpen(true);
+  };
 
   useEffect(() => {
     setStatus(getNextOrderStatus(order.status) || order.status);
     setCarrier(order.carrier ?? "");
     setTrackingNumber(order.trackingNumber ?? "");
-    setCancelReason("");
+    setCancelReasonSelection("");
+    setCustomCancelReason("");
+    setCancelReasonError("");
     setStatusModalOpen(false);
     setCancelModalOpen(false);
+    setCancelSubmitting(false);
   }, [order]);
 
   return (
@@ -840,11 +992,17 @@ function OrderDetail({
               <dd>{formatDate(order.createdAt)}</dd>
             </div>
             <div>
-              <dt>주문상태</dt>
+              <dt>주문처리상태</dt>
               <dd>
                 <span className={`admin-status-badge status-${order.status.toLowerCase()}`}>{order.statusDescription}</span>
               </dd>
             </div>
+            {order.status === "CANCELED" && order.cancelReason && (
+              <div>
+                <dt>취소사유</dt>
+                <dd>{order.cancelReason}</dd>
+              </div>
+            )}
           </dl>
         </section>
 
@@ -853,7 +1011,7 @@ function OrderDetail({
           <dl className="admin-detail-list">
             <div>
               <dt>결제방법</dt>
-              <dd>{order.paymentMethod || "-"}</dd>
+              <dd>{formatPaymentMethod(order.paymentMethod)}</dd>
             </div>
             <div>
               <dt>상품금액</dt>
@@ -879,13 +1037,20 @@ function OrderDetail({
               <img src={item.productImageUrl} alt={item.productName} />
               <div>
                 <strong>{item.productName}</strong>
-                <p>상품 {item.quantity}개 / {formatWon(item.productPrice)}</p>
-                {item.addonName && (
+                <p>{formatWon(item.productPrice)} / {item.quantity}개</p>
+                {formatOrderSizeOptionLabel(item) && (
+                  <p>{formatOrderSizeOptionLabel(item)}</p>
+                )}
+                {(item.addons ?? []).map((addon) => (
+                  <p key={addon.orderItemAddonId}>
+                    추가상품: {addon.addonName} (+{formatWon(addon.addonPrice)}) / {addon.quantity}개
+                  </p>
+                ))}
+                {(item.addons ?? []).length === 0 && item.addonName && (
                   <p>
-                    추가상품 {item.addonName} {item.addonQuantity}개 / {formatWon(item.addonPrice)}
+                    추가상품: {item.addonName} (+{formatWon(item.addonPrice)}) / {item.addonQuantity}개
                   </p>
                 )}
-                <p>합계 {formatWon(item.itemTotalPrice)}</p>
               </div>
             </div>
           ))}
@@ -966,6 +1131,8 @@ function OrderDetail({
         </form>
       </div>
 
+      <AdminErrorMessage message={error} />
+
       {statusModalOpen && (
         <div className="admin-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-status-title">
           <form
@@ -993,7 +1160,7 @@ function OrderDetail({
       )}
 
       <div className="admin-detail-bottom-actions">
-        <button className="admin-outline-button" type="button" onClick={() => setCancelModalOpen(true)}>
+        <button className="admin-outline-button" type="button" onClick={openCancelModal}>
           주문 취소
         </button>
       </div>
@@ -1002,28 +1169,81 @@ function OrderDetail({
         <div className="admin-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="admin-cancel-title">
           <form
             className="admin-modal-card"
-            onSubmit={(event) => {
+            onSubmit={async (event) => {
               event.preventDefault();
-              void onCancel(order.orderId, cancelReason);
+              if (cancelSubmitting) {
+                return;
+              }
+
+              const trimmedCustomCancelReason = customCancelReason.trim();
+
+              if (!cancelReasonSelection) {
+                setCancelReasonError("취소 사유를 선택해주세요.");
+                return;
+              }
+
+              if (cancelReasonSelection === "기타" && !trimmedCustomCancelReason) {
+                setCancelReasonError("취소 사유를 입력해주세요.");
+                return;
+              }
+
+              const cancelReason = cancelReasonSelection === "기타" ? trimmedCustomCancelReason : cancelReasonSelection;
+              setCancelSubmitting(true);
+              setCancelReasonError("");
+
+              try {
+                await onCancel(order.orderId, cancelReason);
+                setCancelModalOpen(false);
+              } finally {
+                setCancelSubmitting(false);
+              }
             }}
           >
             <h3 id="admin-cancel-title">주문 취소</h3>
             <label>
               취소 사유
-              <textarea
-                value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value)}
-                placeholder="취소 사유를 입력해주세요."
-                rows={4}
-              />
+              <select
+                value={cancelReasonSelection}
+                onChange={(event) => {
+                  setCancelReasonSelection(event.target.value);
+                  setCancelReasonError("");
+                }}
+                disabled={cancelSubmitting}
+              >
+                <option value="">취소 사유를 선택해주세요.</option>
+                {ADMIN_CANCEL_REASON_OPTIONS.map((reason) => (
+                  <option key={reason} value={reason}>
+                    {reason}
+                  </option>
+                ))}
+              </select>
+              {cancelReasonSelection === "기타" && (
+                <textarea
+                  value={customCancelReason}
+                  onChange={(event) => {
+                    setCustomCancelReason(event.target.value);
+                    setCancelReasonError("");
+                  }}
+                  placeholder="취소 사유를 입력해주세요."
+                  rows={4}
+                  disabled={cancelSubmitting}
+                />
+              )}
+              <span className="admin-modal-field-hint">고객에게 안내되는 내용입니다.</span>
+              {cancelReasonError && <span className="admin-modal-field-error">{cancelReasonError}</span>}
             </label>
             <p className="admin-modal-warning">취소 후에는 주문이 더 이상 진행되지 않습니다.</p>
             <div className="admin-modal-actions">
-              <button className="admin-outline-button" type="button" onClick={() => setCancelModalOpen(false)}>
+              <button
+                className="admin-outline-button"
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                disabled={cancelSubmitting}
+              >
                 닫기
               </button>
-              <button className="admin-primary-button" type="submit">
-                취소하기
+              <button className="admin-primary-button" type="submit" disabled={cancelSubmitting}>
+                {cancelSubmitting ? "취소 처리 중..." : "취소하기"}
               </button>
             </div>
           </form>
@@ -1034,9 +1254,11 @@ function OrderDetail({
 }
 
 function ProductsPanel({
+  menuKey,
   initialProduct,
   onInitialProductOpened,
 }: {
+  menuKey: number;
   initialProduct: AdminProduct | null;
   onInitialProductOpened: () => void;
 }) {
@@ -1044,6 +1266,9 @@ function ProductsPanel({
   const [productsPage, setProductsPage] = useState<PageResponse<AdminProduct>>(() => createEmptyPage<AdminProduct>());
   const [currentPage, setCurrentPage] = useState(0);
   const [form, setForm] = useState<ProductSaveRequest>(emptyProductForm);
+  const [editingOriginalImageUrls, setEditingOriginalImageUrls] = useState<Record<ProductImageField, string>>(
+    emptyProductOriginalImageUrls,
+  );
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isFormView, setIsFormView] = useState(false);
   const [statusTarget, setStatusTarget] = useState<AdminProduct | null>(null);
@@ -1073,16 +1298,44 @@ function ProductsPanel({
     setNotice("");
     setError("");
 
+    if (!form.imageUrl.trim()) {
+      setError("대표 이미지는 필수입니다.");
+      return;
+    }
+
+    if (form.category === "POSTER") {
+      if (form.sizeOptions.length === 0) {
+        setError("포스터 상품은 사이즈 옵션을 1개 이상 등록해주세요.");
+        return;
+      }
+
+      const invalidSizeOption = form.sizeOptions.some(
+        (option) => !option.sizeName.trim() || option.additionalPrice < 0 || option.stockQuantity < 0,
+      );
+
+      if (invalidSizeOption) {
+        setError("사이즈명, 추가금, 재고를 확인해주세요.");
+        return;
+      }
+    }
+
+    const requestBody: ProductSaveRequest = {
+      ...form,
+      stockQuantity: form.category === "POSTER" ? 0 : form.stockQuantity,
+      sizeOptions: form.category === "POSTER" ? form.sizeOptions : [],
+    };
+
     try {
       if (editingId) {
-        await updateAdminProduct(editingId, form);
+        await updateAdminProduct(editingId, requestBody);
         setNotice("상품이 수정되었습니다.");
       } else {
-        await createAdminProduct(form);
+        await createAdminProduct(requestBody);
         setNotice("상품이 등록되었습니다.");
       }
 
       setForm(emptyProductForm);
+      setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
       setEditingId(null);
       setIsFormView(false);
       await loadProducts(currentPage);
@@ -1159,7 +1412,19 @@ function ProductsPanel({
   }
 
   function startEdit(product: AdminProduct) {
+    const sizeOptions = product.sizeOptions?.map((option) => ({
+      id: option.id,
+      sizeName: option.sizeName,
+      additionalPrice: option.additionalPrice,
+      stockQuantity: option.stockQuantity,
+      active: option.active,
+    })) ?? [];
+
     setEditingId(product.id);
+    setEditingOriginalImageUrls({
+      imageUrl: product.imageUrl,
+      detailImageUrl: product.detailImageUrl ?? "",
+    });
     setForm({
       name: product.name,
       category: product.category,
@@ -1168,9 +1433,21 @@ function ProductsPanel({
       detailImageUrl: product.detailImageUrl ?? "",
       description: product.description,
       stockQuantity: product.stockQuantity,
+      sizeOptions: product.category === "POSTER" ? ensurePosterSizeOptions(sizeOptions) : [],
     });
     setIsFormView(true);
   }
+
+  useEffect(() => {
+    setEditingId(null);
+    setForm(emptyProductForm);
+    setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
+    setIsFormView(false);
+    setStatusTarget(null);
+    setDeleteTarget(null);
+    setError("");
+    setNotice("");
+  }, [menuKey]);
 
   useEffect(() => {
     if (!initialProduct) {
@@ -1184,12 +1461,14 @@ function ProductsPanel({
   function openCreateForm() {
     setEditingId(null);
     setForm(emptyProductForm);
+    setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
     setIsFormView(true);
   }
 
   function closeForm() {
     setEditingId(null);
     setForm(emptyProductForm);
+    setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
     setIsFormView(false);
   }
 
@@ -1208,7 +1487,14 @@ function ProductsPanel({
         <Feedback notice={notice} error={error} />
         <Toast message={notice} onClose={() => setNotice("")} />
         <h2 className="admin-section-title">{editingId ? "상품 수정" : "상품 등록"}</h2>
-        <ProductForm form={form} editingId={editingId} onChange={setForm} onSubmit={handleSubmit} onCancel={closeForm} />
+        <ProductForm
+          form={form}
+          editingId={editingId}
+          originalImageUrls={editingOriginalImageUrls}
+          onChange={setForm}
+          onSubmit={handleSubmit}
+          onCancel={closeForm}
+        />
       </section>
     );
   }
@@ -1251,26 +1537,143 @@ function ProductsPanel({
 function ProductForm({
   form,
   editingId,
+  originalImageUrls,
   onChange,
   onSubmit,
   onCancel,
 }: {
   form: ProductSaveRequest;
   editingId: number | null;
+  originalImageUrls: Record<ProductImageField, string>;
   onChange: (form: ProductSaveRequest) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
 }) {
-  function handleImageDrop(event: DragEvent<HTMLInputElement>, field: "imageUrl" | "detailImageUrl", basePath: string) {
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const detailImageInputRef = useRef<HTMLInputElement | null>(null);
+  const lastUploadedImageUrlsRef = useRef<Record<ProductImageField, string>>({
+    imageUrl: "",
+    detailImageUrl: "",
+  });
+  const currentImageUrlsRef = useRef<Record<ProductImageField, string>>({
+    imageUrl: form.imageUrl,
+    detailImageUrl: form.detailImageUrl,
+  });
+  const [uploadingField, setUploadingField] = useState<ProductImageField | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    currentImageUrlsRef.current = {
+      imageUrl: form.imageUrl,
+      detailImageUrl: form.detailImageUrl,
+    };
+  }, [form.imageUrl, form.detailImageUrl]);
+
+  async function uploadImageFile(file: File, field: ProductImageField) {
+    const extensionStart = file.name.lastIndexOf(".");
+    const fileExtension = extensionStart >= 0 ? file.name.slice(extensionStart).toLowerCase() : "";
+
+    if (!ADMIN_IMAGE_ALLOWED_TYPES.has(file.type) || !ADMIN_IMAGE_ALLOWED_EXTENSIONS.has(fileExtension)) {
+      setUploadError("jpg, png, webp 이미지만 업로드할 수 있습니다.");
+      return;
+    }
+
+    if (file.size > ADMIN_IMAGE_MAX_SIZE) {
+      setUploadError("이미지는 최대 5MB까지 업로드할 수 있습니다.");
+      return;
+    }
+
+    setUploadingField(field);
+    setUploadError(null);
+
+    try {
+      const response =
+        field === "imageUrl"
+          ? await uploadAdminProductImage(file)
+          : await uploadAdminProductDetailImage(file);
+
+      currentImageUrlsRef.current[field] = response.imageUrl;
+      onChange({ ...form, [field]: response.imageUrl });
+
+      const previousUploadedImageUrl = lastUploadedImageUrlsRef.current[field];
+
+      if (
+        previousUploadedImageUrl &&
+        previousUploadedImageUrl !== response.imageUrl &&
+        previousUploadedImageUrl !== originalImageUrls[field]
+      ) {
+        void deleteAdminImage(previousUploadedImageUrl)
+          .catch((deleteError) => {
+            console.warn("미사용 이미지 삭제 요청에 실패했습니다.", deleteError);
+          });
+      }
+
+      lastUploadedImageUrlsRef.current[field] = response.imageUrl;
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "이미지 업로드 실패");
+    } finally {
+      setUploadingField(null);
+    }
+  }
+
+  function handleImageDrop(event: DragEvent<HTMLInputElement>, field: ProductImageField) {
     event.preventDefault();
 
     const file = event.dataTransfer.files[0];
 
-    if (!file || !file.type.startsWith("image/")) {
+    if (!file) {
       return;
     }
 
-    onChange({ ...form, [field]: `${basePath}${file.name}` });
+    void uploadImageFile(file, field);
+  }
+
+  function handleImageSelect(event: ChangeEvent<HTMLInputElement>, field: ProductImageField) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    void uploadImageFile(file, field);
+  }
+
+  function updateCategory(category: ProductCategory) {
+    onChange({
+      ...form,
+      category,
+      stockQuantity: category === "POSTER" ? 0 : form.stockQuantity,
+      sizeOptions: category === "POSTER" ? ensurePosterSizeOptions(form.sizeOptions) : [],
+    });
+  }
+
+  function addSizeOption() {
+    onChange({
+      ...form,
+      sizeOptions: [
+        ...form.sizeOptions,
+        createEmptySizeOption(),
+      ],
+    });
+  }
+
+  function updateSizeOption(index: number, patch: Partial<ProductSizeOptionSaveRequest>) {
+    onChange({
+      ...form,
+      sizeOptions: form.sizeOptions.map((option, optionIndex) =>
+        optionIndex === index ? { ...option, ...patch } : option,
+      ),
+    });
+  }
+
+  function removeSizeOption(index: number) {
+    const nextSizeOptions = form.sizeOptions.filter((_, optionIndex) => optionIndex !== index);
+
+    onChange({
+      ...form,
+      sizeOptions: form.category === "POSTER" ? ensurePosterSizeOptions(nextSizeOptions) : nextSizeOptions,
+    });
   }
 
   return (
@@ -1281,7 +1684,7 @@ function ProductForm({
       </label>
       <label>
         카테고리
-        <select value={form.category} onChange={(event) => onChange({ ...form, category: event.target.value as ProductCategory })}>
+        <select value={form.category} onChange={(event) => updateCategory(event.target.value as ProductCategory)}>
           {PRODUCT_CATEGORIES.map((category) => (
             <option key={category.value} value={category.value}>
               {category.label}
@@ -1293,35 +1696,131 @@ function ProductForm({
         가격
         <input type="number" min="0" value={form.price} onChange={(event) => onChange({ ...form, price: Number(event.target.value) })} />
       </label>
+      {form.category === "POSTER" ? (
+        <div className="admin-size-option-field">
+          <div className="admin-size-option-header">
+            <span>사이즈 옵션</span>
+            <button className="admin-outline-button" type="button" onClick={addSizeOption}>
+              사이즈 추가
+            </button>
+          </div>
+          <div className="admin-size-option-list">
+            {form.sizeOptions.map((option, index) => (
+              <div className="admin-size-option-row" key={`${option.id ?? "new"}-${index}`}>
+                <label>
+                  사이즈명
+                  <input
+                    value={option.sizeName}
+                    onChange={(event) => updateSizeOption(index, { sizeName: event.target.value })}
+                  />
+                </label>
+                <label>
+                  추가금
+                  <input
+                    type="number"
+                    min="0"
+                    value={option.additionalPrice}
+                    onChange={(event) => updateSizeOption(index, { additionalPrice: Number(event.target.value) })}
+                  />
+                </label>
+                <label>
+                  재고
+                  <input
+                    type="number"
+                    min="0"
+                    value={option.stockQuantity}
+                    onChange={(event) => updateSizeOption(index, { stockQuantity: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="admin-size-option-active">
+                  활성
+                  <input
+                    type="checkbox"
+                    checked={option.active}
+                    onChange={(event) => updateSizeOption(index, { active: event.target.checked })}
+                  />
+                </label>
+                <button className="admin-outline-button" type="button" onClick={() => removeSizeOption(index)}>
+                  삭제
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <label>
+          재고 수량
+          <input
+            type="number"
+            min="0"
+            value={form.stockQuantity}
+            onChange={(event) => onChange({ ...form, stockQuantity: Number(event.target.value) })}
+          />
+        </label>
+      )}
       <label>
-        재고 수량
-        <input
-          type="number"
-          min="0"
-          value={form.stockQuantity}
-          onChange={(event) => onChange({ ...form, stockQuantity: Number(event.target.value) })}
-        />
+        대표 이미지
+        <div className="admin-image-field">
+          <input
+            value={form.imageUrl}
+            onChange={(event) => onChange({ ...form, imageUrl: event.target.value })}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => handleImageDrop(event, "imageUrl")}
+          />
+          <input
+            ref={imageInputRef}
+            className="admin-file-input"
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            onChange={(event) => handleImageSelect(event, "imageUrl")}
+          />
+          <button
+            className="admin-outline-button"
+            type="button"
+            disabled={uploadingField === "imageUrl"}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            {uploadingField === "imageUrl" ? "업로드중" : "파일 선택"}
+          </button>
+        </div>
+        {form.imageUrl && (
+          <div className="admin-image-preview">
+            <img src={form.imageUrl} alt="상품 대표 이미지 미리보기" />
+          </div>
+        )}
       </label>
       <label>
-        이미지 경로
-        <input
-          value={form.imageUrl}
-          onChange={(event) => onChange({ ...form, imageUrl: event.target.value })}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => handleImageDrop(event, "imageUrl", "/assets/products/")}
-          placeholder="/assets/products/example.jpeg"
-        />
+        상세 이미지
+        <div className="admin-image-field">
+          <input
+            value={form.detailImageUrl}
+            onChange={(event) => onChange({ ...form, detailImageUrl: event.target.value })}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => handleImageDrop(event, "detailImageUrl")}
+          />
+          <input
+            ref={detailImageInputRef}
+            className="admin-file-input"
+            type="file"
+            accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+            onChange={(event) => handleImageSelect(event, "detailImageUrl")}
+          />
+          <button
+            className="admin-outline-button"
+            type="button"
+            disabled={uploadingField === "detailImageUrl"}
+            onClick={() => detailImageInputRef.current?.click()}
+          >
+            {uploadingField === "detailImageUrl" ? "업로드중" : "파일 선택"}
+          </button>
+        </div>
+        {form.detailImageUrl && (
+          <div className="admin-image-preview admin-image-preview-detail">
+            <img src={form.detailImageUrl} alt="상품 상세 이미지 미리보기" />
+          </div>
+        )}
       </label>
-      <label>
-        상세 이미지 경로
-        <input
-          value={form.detailImageUrl}
-          onChange={(event) => onChange({ ...form, detailImageUrl: event.target.value })}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => handleImageDrop(event, "detailImageUrl", "/assets/products/details/")}
-          placeholder="/assets/products/details/example-detail.jpeg"
-        />
-      </label>
+      {uploadError && <p className="admin-inline-error">{uploadError}</p>}
       <label>
         설명
         <textarea value={form.description} onChange={(event) => onChange({ ...form, description: event.target.value })} rows={4} />
@@ -1383,7 +1882,7 @@ function ProductList({
                     </td>
                     <td className="admin-center-cell">{product.categoryDescription}</td>
                     <td className="admin-price-cell">{formatNumber(product.price)}</td>
-                    <td className="admin-center-cell">{product.stockQuantity}</td>
+                    <td className="admin-center-cell">{formatProductStock(product)}</td>
                     <td className="admin-center-cell">{product.active ? "판매중" : "판매중지"}</td>
                     <td>
                       <div className="admin-mini-actions">
@@ -1415,10 +1914,26 @@ function ProductList({
   );
 }
 
+function formatProductStock(product: AdminProduct) {
+  if (product.category !== "POSTER") {
+    return product.stockQuantity;
+  }
+
+  if (!product.sizeOptions || product.sizeOptions.length === 0) {
+    return "-";
+  }
+
+  return product.sizeOptions
+    .map((option) => `${option.sizeName} ${option.stockQuantity}`)
+    .join(" / ");
+}
+
 function AddonsPanel({
+  menuKey,
   initialAddon,
   onInitialAddonOpened,
 }: {
+  menuKey: number;
   initialAddon: AdminAddon | null;
   onInitialAddonOpened: () => void;
 }) {
@@ -1552,6 +2067,16 @@ function AddonsPanel({
   }
 
   useEffect(() => {
+    setEditingId(null);
+    setForm(emptyAddonForm);
+    setIsFormView(false);
+    setStatusTarget(null);
+    setDeleteTarget(null);
+    setError("");
+    setNotice("");
+  }, [menuKey]);
+
+  useEffect(() => {
     if (!initialAddon) {
       return;
     }
@@ -1573,6 +2098,9 @@ function AddonsPanel({
   }
 
   if (isFormView) {
+    const addonTypeOptions: Array<{ value: AddonType; label: string }> =
+      form.type === "FRAME" ? [...ADDON_TYPES, LEGACY_ADDON_TYPE] : ADDON_TYPES;
+
     return (
       <section className="admin-section">
         <PanelHeader
@@ -1595,7 +2123,7 @@ function AddonsPanel({
           <label>
             종류
             <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as AddonType })}>
-              {ADDON_TYPES.map((type) => (
+              {addonTypeOptions.map((type) => (
                 <option key={type.value} value={type.value}>
                   {type.label}
                 </option>
@@ -2562,7 +3090,6 @@ function PanelHeader({
   return (
     <header className={`admin-panel-header ${action ? "has-action" : ""}`}>
       <div>
-        <p>ADMIN</p>
         <h1>{title}</h1>
         {description && <span>{description}</span>}
       </div>
@@ -2576,12 +3103,16 @@ function PanelHeader({
   );
 }
 
-function Feedback({ error }: { notice: string; error: string }) {
-  if (!error) {
+function AdminErrorMessage({ message }: { message: string }) {
+  if (!message) {
     return null;
   }
 
-  return <p className="admin-message is-error">{error}</p>;
+  return <p className="admin-error-message">{message}</p>;
+}
+
+function Feedback({ error }: { notice: string; error: string }) {
+  return <AdminErrorMessage message={error} />;
 }
 
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {

@@ -1,5 +1,5 @@
 export type ProductCategory = "ALL" | "POSTCARD" | "POSTER" | "ETC";
-export type AddonType = "FRAME";
+export type AddonType = "FRAME" | "PREMIUM_FRAME" | "BASIC_FRAME";
 
 export interface Addon {
   id: number;
@@ -21,6 +21,16 @@ export interface Product {
   description: string;
   soldOut: boolean;
   addons?: Addon[];
+  sizeOptions?: ProductSizeOption[];
+}
+
+export interface ProductSizeOption {
+  id: number;
+  sizeName: string;
+  additionalPrice: number;
+  stockQuantity: number;
+  active: boolean;
+  soldOut: boolean;
 }
 
 export interface CategoryTab {
@@ -45,16 +55,16 @@ export const addons: Addon[] = [
   {
     id: 1,
     name: "A3 원목 액자",
-    type: "FRAME",
-    typeDescription: "액자",
+    type: "PREMIUM_FRAME",
+    typeDescription: "프리미엄 액자",
     price: 12000,
     soldOut: false,
   },
   {
     id: 2,
     name: "A2 원목 액자",
-    type: "FRAME",
-    typeDescription: "액자",
+    type: "BASIC_FRAME",
+    typeDescription: "베이직 액자",
     price: 18000,
     soldOut: false,
   },

@@ -1,6 +1,7 @@
 package com.earthy.shop.domain.notification.service;
 
 import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent;
+import com.earthy.shop.domain.notification.event.OrderCanceledNotificationEvent;
 import com.earthy.shop.domain.notification.event.ShippingStartedNotificationEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,19 @@ public class NotificationEventListener {
             kakaoAlimtalkService.sendShippingStarted(event);
         } catch (Exception e) {
             log.error("[SHIPPING STARTED ALIMTALK FAILED] trackingNumber={}", event.trackingNumber(), e);
+        }
+    }
+
+    // 주문 취소 알림 발송
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleOrderCanceled(OrderCanceledNotificationEvent event) {
+        try {
+            kakaoAlimtalkService.sendOrderCanceled(event);
+        } catch (Exception e) {
+            log.error("[ORDER CANCELED ALIMTALK FAILED] orderNumber={} | requester={}",
+                    event.orderNumber(),
+                    event.requester(),
+                    e);
         }
     }
 }

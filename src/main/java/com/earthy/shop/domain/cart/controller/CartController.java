@@ -2,6 +2,7 @@ package com.earthy.shop.domain.cart.controller;
 
 import com.earthy.shop.common.response.ApiResponseDto;
 import com.earthy.shop.domain.cart.dto.request.CartItemAddRequestDto;
+import com.earthy.shop.domain.cart.dto.request.CartItemAddonQuantityUpdateRequestDto;
 import com.earthy.shop.domain.cart.dto.request.CartItemQuantityUpdateRequestDto;
 import com.earthy.shop.domain.cart.dto.response.CartResponseDto;
 import com.earthy.shop.domain.cart.service.CartService;
@@ -49,6 +50,19 @@ public class CartController {
     ) {
         return ResponseEntity.ok(ApiResponseDto.success(
                 "장바구니 수량 변경 성공", cartService.updateQuantity(authentication.getName(), cartItemId, requestDto)));
+    }
+
+    // 장바구니 추가상품 수량 변경
+    @PatchMapping("/{cartItemId}/addons/{cartItemAddonId}")
+    public ResponseEntity<ApiResponseDto<CartResponseDto>> updateAddonQuantity(
+            Authentication authentication,
+            @PathVariable Long cartItemId,
+            @PathVariable Long cartItemAddonId,
+            @Valid @RequestBody CartItemAddonQuantityUpdateRequestDto requestDto
+    ) {
+        return ResponseEntity.ok(ApiResponseDto.success(
+                "장바구니 추가상품 수량 변경 성공",
+                cartService.updateAddonQuantity(authentication.getName(), cartItemId, cartItemAddonId, requestDto)));
     }
 
     // 장바구니 항목 삭제

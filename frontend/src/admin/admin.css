@@ -658,6 +658,103 @@ button.admin-metric-card:hover {
   resize: vertical;
 }
 
+.admin-image-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 8px;
+}
+
+.admin-image-field .admin-outline-button {
+  min-height: 42px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.admin-image-preview {
+  width: 180px;
+  margin-top: 10px;
+  border: 1px solid #d7d2c7;
+  background: #fff;
+}
+
+.admin-image-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.admin-image-preview-detail {
+  width: min(360px, 100%);
+}
+
+.admin-image-preview-detail img {
+  aspect-ratio: 16 / 9;
+}
+
+.admin-file-input {
+  display: none;
+}
+
+.admin-error-message,
+.admin-inline-error {
+  margin: -4px 0 0;
+  color: #d93025;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.admin-size-option-field {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-size-option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.admin-size-option-header .admin-outline-button {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.admin-size-option-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-size-option-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.5fr) minmax(90px, 1fr) minmax(90px, 1fr) 66px 64px;
+  gap: 8px;
+  align-items: end;
+}
+
+.admin-size-option-row label {
+  min-width: 0;
+}
+
+.admin-size-option-active {
+  justify-items: center;
+}
+
+.admin-size-option-active input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+
+.admin-size-option-row > button {
+  min-height: 42px;
+  padding: 0 10px;
+}
+
 .admin-page-form {
   width: min(760px, 100%);
   max-width: 760px;
@@ -725,7 +822,8 @@ button.admin-metric-card:hover {
   color: #15130f;
 }
 
-.admin-primary-button:disabled {
+.admin-primary-button:disabled,
+.admin-outline-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -749,9 +847,13 @@ button.admin-metric-card:hover {
 }
 
 .admin-message.is-error {
-  border-color: #9b3f2f;
-  color: #15130f;
-  background: #f7ebe7;
+  padding: 0;
+  border: 0;
+  color: #d93025;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .admin-toast {
@@ -1182,6 +1284,20 @@ button.admin-metric-card:hover {
   line-height: 1.5;
 }
 
+.admin-modal-field-hint {
+  color: #6c665b;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.admin-modal-field-error {
+  color: #d13b2f;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
 .admin-modal-card label {
   display: grid;
   gap: 8px;
@@ -1189,15 +1305,23 @@ button.admin-metric-card:hover {
   font-weight: 700;
 }
 
+.admin-modal-card select,
 .admin-modal-card textarea {
   width: 100%;
-  min-height: 112px;
   padding: 11px 12px;
   border: 1px solid #d7d2c7;
   border-radius: 0;
   background: #fff;
   font: inherit;
   font-weight: 400;
+}
+
+.admin-modal-card select {
+  height: 46px;
+}
+
+.admin-modal-card textarea {
+  min-height: 112px;
   resize: none;
 }
 
@@ -1383,6 +1507,16 @@ button.admin-metric-card:hover {
 
   .admin-summary-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-size-option-row {
+    grid-template-columns: 1fr;
+    padding: 12px;
+    border: 1px solid #d9d4ca;
+  }
+
+  .admin-size-option-active {
+    justify-items: start;
   }
 
   .admin-dashboard-grid {

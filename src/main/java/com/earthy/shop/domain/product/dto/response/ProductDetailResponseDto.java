@@ -2,6 +2,7 @@ package com.earthy.shop.domain.product.dto.response;
 
 import com.earthy.shop.domain.addon.dto.response.AddonResponseDto;
 import com.earthy.shop.domain.product.entity.Product;
+import com.earthy.shop.domain.product.entity.ProductSizeOption;
 import com.earthy.shop.domain.product.enums.ProductCategory;
 
 import java.util.List;
@@ -17,11 +18,22 @@ public record ProductDetailResponseDto(
         String detailImageUrl,
         String description,
         boolean soldOut,
-        List<AddonResponseDto> addons
+        List<AddonResponseDto> addons,
+        List<ProductSizeOptionResponseDto> sizeOptions
 ) {
     public static ProductDetailResponseDto of(Product product, List<AddonResponseDto> addons) {
+        return of(product, addons, List.of());
+    }
+
+    public static ProductDetailResponseDto of(
+            Product product,
+            List<AddonResponseDto> addons,
+            List<ProductSizeOption> sizeOptions
+    ) {
         // 재고 기준 품절 여부
-        boolean soldOut = product.getStockQuantity() <= 0;
+        boolean soldOut = product.getCategory() == ProductCategory.POSTER
+                ? sizeOptions.stream().noneMatch(option -> option.isActive() && option.getStockQuantity() > 0)
+                : product.getStockQuantity() <= 0;
 
         return new ProductDetailResponseDto(
                 product.getId(),
@@ -33,7 +45,10 @@ public record ProductDetailResponseDto(
                 product.getDetailImageUrl(),
                 product.getDescription(),
                 soldOut,
-                addons
+                addons,
+                sizeOptions.stream()
+                        .map(ProductSizeOptionResponseDto::from)
+                        .toList()
         );
     }
 }

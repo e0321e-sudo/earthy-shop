@@ -25,7 +25,8 @@ public record OrderResponseDto(
         List<OrderItemResponseDto> items,
         LocalDateTime createdAt,
         String carrier,
-        String trackingNumber
+        String trackingNumber,
+        String cancelReason
 ) {
     public static OrderResponseDto from(Order order) {
         return new OrderResponseDto(
@@ -50,7 +51,8 @@ public record OrderResponseDto(
                         .toList(),
                 order.getCreatedAt(),
                 order.getCarrier(),
-                order.getTrackingNumber()
+                order.getTrackingNumber(),
+                order.getCancelReason()
         );
     }
 }

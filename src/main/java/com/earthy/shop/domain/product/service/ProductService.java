@@ -3,6 +3,7 @@ package com.earthy.shop.domain.product.service;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.common.response.PageResponseDto;
+import com.earthy.shop.common.storage.service.S3ImageService;
 import com.earthy.shop.domain.addon.dto.response.AddonResponseDto;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
@@ -20,9 +21,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -33,18 +36,20 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final AddonService addonService;
     private final CartItemRepository cartItemRepository;
+    private final ProductSizeOptionService productSizeOptionService;
+    private final S3ImageService s3ImageService;
 
     // 고객용 상품 목록 조회
     public PageResponseDto<ProductResponseDto> getProducts(ProductCategory category, Pageable pageable){
         // 전체상품조회 선택 시 전체 활성 상품 조회
         if (category == null) {
             return PageResponseDto.from(productRepository.findByActiveTrueAndDeletedFalse(pageable)
-                    .map(ProductResponseDto::from));
+                    .map(this::toProductResponse));
         }
 
         // 카테고리 선택 시 해당 카테고리 활성 상품 조회
         return PageResponseDto.from(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(category, pageable)
-                .map(ProductResponseDto::from));
+                .map(this::toProductResponse));
     }
 
     // 고객 상품 상세 조회
@@ -59,13 +64,19 @@ public class ProductService {
             addons = addonService.getAddons();
         }
 
-        return ProductDetailResponseDto.of(product, addons);
+        return ProductDetailResponseDto.of(
+                product,
+                addons,
+                product.getCategory() == ProductCategory.POSTER
+                        ? productSizeOptionService.getActiveOptions(product)
+                        : List.of()
+        );
     }
 
     // 고객용 상품명 검색
     public PageResponseDto<ProductResponseDto> searchProducts(String keyword, Pageable pageable) {
         return PageResponseDto.from(productRepository.searchByName(keyword, pageable)
-                .map(ProductResponseDto::from));
+                .map(this::toProductResponse));
     }
 
     // 관리자용 상품 등록
@@ -76,20 +87,22 @@ public class ProductService {
                 requestDto.getCategory(),
                 requestDto.getPrice(),
                 requestDto.getImageUrl(),
-                requestDto.getDetailImageUrl(),
+                normalizeOptionalText(requestDto.getDetailImageUrl()),
                 requestDto.getDescription(),
-                requestDto.getStockQuantity()
+                resolveStockQuantity(requestDto.getCategory(), requestDto.getStockQuantity())
         );
 
         Product savedProduct = productRepository.save(product);
 
-        return AdminProductResponseDto.from(savedProduct);
+        productSizeOptionService.syncOptions(savedProduct, requestDto.getSizeOptions());
+
+        return AdminProductResponseDto.from(savedProduct, productSizeOptionService.getOptions(savedProduct));
     }
 
     // 관리자용 전체 상품 목록 조회
     public PageResponseDto<AdminProductResponseDto> getAdminProducts(Pageable pageable) {
         return PageResponseDto.from(productRepository.findByDeletedFalse(pageable)
-                .map(AdminProductResponseDto::from));
+                .map(product -> AdminProductResponseDto.from(product, productSizeOptionService.getOptions(product))));
     }
 
     // 관리자용 상품 수정
@@ -97,18 +110,25 @@ public class ProductService {
     public AdminProductResponseDto updateProduct(Long productId, ProductUpdateRequestDto requestDto) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+        String previousImageUrl = product.getImageUrl();
+        String previousDetailImageUrl = product.getDetailImageUrl();
+        String nextDetailImageUrl = normalizeOptionalText(requestDto.getDetailImageUrl());
 
         product.update(
                 requestDto.getName(),
                 requestDto.getCategory(),
                 requestDto.getPrice(),
                 requestDto.getImageUrl(),
-                requestDto.getDetailImageUrl(),
+                nextDetailImageUrl,
                 requestDto.getDescription(),
-                requestDto.getStockQuantity()
+                resolveStockQuantity(requestDto.getCategory(), requestDto.getStockQuantity())
         );
 
-        return AdminProductResponseDto.from(product);
+        productSizeOptionService.syncOptions(product, requestDto.getSizeOptions());
+        deleteReplacedImageAfterCommit(previousImageUrl, requestDto.getImageUrl());
+        deleteReplacedImageAfterCommit(previousDetailImageUrl, nextDetailImageUrl);
+
+        return AdminProductResponseDto.from(product, productSizeOptionService.getOptions(product));
     }
 
     // 관리자용 상품 비활성화
@@ -118,7 +138,7 @@ public class ProductService {
 
         product.deactivate();
 
-        return AdminProductResponseDto.from(product);
+        return AdminProductResponseDto.from(product, productSizeOptionService.getOptions(product));
     }
 
     // 관리자용 상품 활성화
@@ -128,7 +148,7 @@ public class ProductService {
 
         product.activate();
 
-        return AdminProductResponseDto.from(product);
+        return AdminProductResponseDto.from(product, productSizeOptionService.getOptions(product));
     }
 
     // 관리자용 상품 삭제
@@ -194,5 +214,53 @@ public class ProductService {
     public Product findProduct(Long productId) {
         return productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+    }
+
+    // 선택 입력값은 비어 있으면 DB에 null로 저장
+    private String normalizeOptionalText(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return value.trim();
+    }
+
+    // 포스터 상품은 사이즈별 재고를 사용하므로 기존 단일 재고는 0으로 유지
+    private int resolveStockQuantity(ProductCategory category, int stockQuantity) {
+        if (category == ProductCategory.POSTER) {
+            return 0;
+        }
+
+        return stockQuantity;
+    }
+
+    // 상품 수정 트랜잭션 커밋 후 교체된 기존 S3 이미지만 정리
+    private void deleteReplacedImageAfterCommit(String previousImageUrl, String nextImageUrl) {
+        if (previousImageUrl == null || previousImageUrl.isBlank() || Objects.equals(previousImageUrl, nextImageUrl)) {
+            return;
+        }
+
+        Runnable deleteTask = () -> s3ImageService.deleteImageIfOwned(previousImageUrl);
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            deleteTask.run();
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteTask.run();
+            }
+        });
+    }
+
+    // 포스터 상품은 사이즈 옵션 재고 기준으로 품절 여부를 계산
+    private ProductResponseDto toProductResponse(Product product) {
+        if (product.getCategory() != ProductCategory.POSTER) {
+            return ProductResponseDto.from(product);
+        }
+
+        return ProductResponseDto.from(product, productSizeOptionService.getActiveOptions(product));
     }
 }

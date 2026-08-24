@@ -16,10 +16,22 @@ export interface OrderItemResponse {
   productName: string;
   productImageUrl: string;
   productPrice: number;
+  sizeOptionId: number | null;
+  sizeName: string | null;
+  sizeAdditionalPrice: number;
+  productUnitPrice: number;
   addonId: number | null;
   addonName: string | null;
   addonPrice: number;
   addonQuantity: number;
+  addons: Array<{
+    orderItemAddonId: number;
+    addonId: number;
+    addonName: string;
+    addonPrice: number;
+    quantity: number;
+    totalPrice: number;
+  }>;
   quantity: number;
   itemTotalPrice: number;
 }
@@ -44,6 +56,7 @@ export interface OrderResponse {
   createdAt: string;
   carrier?: string | null;
   trackingNumber?: string | null;
+  cancelReason?: string | null;
 }
 
 export interface OrderCreateRequest {

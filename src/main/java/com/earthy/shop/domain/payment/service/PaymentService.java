@@ -8,17 +8,17 @@ import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent;
 import com.earthy.shop.domain.order.entity.Order;
 import com.earthy.shop.domain.order.entity.OrderItem;
+import com.earthy.shop.domain.order.entity.OrderItemAddon;
 import com.earthy.shop.domain.order.service.OrderService;
-import com.earthy.shop.domain.payment.client.TossPaymentClient;
+import com.earthy.shop.domain.payment.client.PortOnePaymentClient;
+import com.earthy.shop.domain.payment.dto.portone.PortOnePaymentResponseDto;
 import com.earthy.shop.domain.payment.dto.request.PaymentConfirmRequestDto;
 import com.earthy.shop.domain.payment.dto.response.PaymentResponseDto;
-import com.earthy.shop.domain.payment.dto.toss.TossCancelRequestDto;
-import com.earthy.shop.domain.payment.dto.toss.TossConfirmRequestDto;
-import com.earthy.shop.domain.payment.dto.toss.TossConfirmResponseDto;
 import com.earthy.shop.domain.payment.entity.Payment;
 import com.earthy.shop.domain.payment.enums.PaymentStatus;
 import com.earthy.shop.domain.payment.repository.PaymentRepository;
 import com.earthy.shop.domain.product.service.ProductService;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,7 +37,8 @@ public class PaymentService {
     private final OrderService orderService;
     private final ProductService productService;
     private final AddonService addonService;
-    private final TossPaymentClient tossPaymentClient;
+    private final ProductSizeOptionService productSizeOptionService;
+    private final PortOnePaymentClient portOnePaymentClient;
     private final ApplicationEventPublisher eventPublisher;
     private final IdempotencyService idempotencyService;
 
@@ -116,7 +117,9 @@ public class PaymentService {
         }
 
         // 결제 키 중복 검증
-        if (paymentRepository.existsByPaymentKey(requestDto.getPaymentKey())) {
+        String portOnePaymentId = resolvePaymentId(requestDto);
+
+        if (paymentRepository.existsByPaymentKey(portOnePaymentId)) {
             throw new BusinessException(ErrorCode.DUPLICATE_PAYMENT_KEY);
         }
 
@@ -125,51 +128,49 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
-        // Toss 결제 승인 요청
-        TossConfirmResponseDto tossResponse = tossPaymentClient.confirmPayment(
-                new TossConfirmRequestDto(
-                        requestDto.getPaymentKey(),
-                        order.getOrderNumber(),
-                        requestDto.getAmount()
-                )
-        );
+        // PortOne 결제 단건 조회로 승인 결과 검증
+        PortOnePaymentResponseDto portOneResponse = portOnePaymentClient.getPayment(portOnePaymentId);
 
-        // Toss 결제 상태 검증
-        if (!"DONE".equals(tossResponse.status())) {
+        // PortOne 결제 상태 검증
+        if (!"PAID".equals(portOneResponse.status())) {
             throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_FAILED);
         }
 
-        // Toss 주문번호 검증
-        if (!order.getOrderNumber().equals(tossResponse.orderId())) {
+        // PortOne 주문명 검증
+        if (portOneResponse.orderName() != null && !order.getOrderNumber().equals(portOneResponse.orderName())) {
             throw new BusinessException(ErrorCode.PAYMENT_ORDER_MISMATCH);
         }
 
-        // Toss 결제 후 금액 검증
-        if (order.getTotalPrice() != tossResponse.totalAmount()) {
+        // PortOne 결제 후 금액 검증
+        if (order.getTotalPrice() != portOneResponse.totalAmount()) {
             throw new BusinessException(ErrorCode.PAYMENT_AMOUNT_MISMATCH);
         }
 
         // 주문 상품 재고 차감
         for (OrderItem orderItem : order.getOrderItems()) {
-            productService.decreaseStock(orderItem.getProductId(), orderItem.getQuantity());
+            decreaseOrderItemStock(orderItem);
 
             if (orderItem.getAddonId() != null) {
                 addonService.decreaseStock(orderItem.getAddonId(), orderItem.getAddonQuantity());
+            }
+
+            for (OrderItemAddon addon : orderItem.getOrderItemAddons()) {
+                addonService.decreaseStock(addon.getAddonId(), addon.getQuantity());
             }
         }
 
         // 결제 생성
         Payment payment = new Payment(
                 order,
-                tossResponse.paymentKey(),
-                tossResponse.orderId(),
-                tossResponse.totalAmount(),
-                tossResponse.method(),
+                portOneResponse.resolvedPaymentId(portOnePaymentId),
+                order.getOrderNumber(),
+                portOneResponse.totalAmount(),
+                portOneResponse.resolvedMethod(),
                 PaymentStatus.DONE
         );
 
         // 주문 결제 완료 처리
-        orderService.payOrder(order, tossResponse.method());
+        orderService.payOrder(order, portOneResponse.resolvedMethod());
 
         // 결제 저장
         Payment savedPayment = paymentRepository.save(payment);
@@ -211,6 +212,29 @@ public class PaymentService {
         return firstProductName + " 외 " + extraItemCount + "개";
     }
 
+    // 결제 ID 조회
+    private String resolvePaymentId(PaymentConfirmRequestDto requestDto) {
+        if (requestDto.getPaymentId() != null && !requestDto.getPaymentId().isBlank()) {
+            return requestDto.getPaymentId();
+        }
+
+        if (requestDto.getPaymentKey() != null && !requestDto.getPaymentKey().isBlank()) {
+            return requestDto.getPaymentKey();
+        }
+
+        throw new BusinessException(ErrorCode.PAYMENT_CONFIRM_FAILED);
+    }
+
+    // 주문 상품 재고 차감
+    private void decreaseOrderItemStock(OrderItem orderItem) {
+        if (orderItem.getSizeOptionId() != null) {
+            productSizeOptionService.decreaseStock(orderItem.getSizeOptionId(), orderItem.getQuantity());
+            return;
+        }
+
+        productService.decreaseStock(orderItem.getProductId(), orderItem.getQuantity());
+    }
+
     // 결제 취소
     @Transactional
     public void cancelPayment(Order order, String cancelReason) {
@@ -218,15 +242,35 @@ public class PaymentService {
         Payment payment = paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
-        // Toss 결제 취소 요청
-        TossConfirmResponseDto tossResponse = tossPaymentClient.cancelPayment(
+        // PortOne 결제 취소 요청
+        PortOnePaymentResponseDto portOneResponse = portOnePaymentClient.cancelPayment(
                 payment.getPaymentKey(),
-                new TossCancelRequestDto(cancelReason)
+                cancelReason
         );
 
-        // Toss 결제 취소 상태 검증
-        if (!"CANCELED".equals(tossResponse.status())) {
-            throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+        // PortOne 결제 취소 상태 검증
+        if (!portOneResponse.isCancelSucceeded()) {
+            log.warn("[PAYMENT CANCEL STATUS UNEXPECTED] orderId={} | orderNumber={} | paymentKey={} | status={} | nestedPaymentStatus={} | cancellationStatus={}",
+                    order.getId(),
+                    order.getOrderNumber(),
+                    payment.getPaymentKey(),
+                    portOneResponse.status(),
+                    portOneResponse.nestedPaymentStatus(),
+                    portOneResponse.cancellationStatus());
+
+            PortOnePaymentResponseDto verifiedPayment = portOnePaymentClient.getPaymentForCancelVerification(
+                    payment.getPaymentKey()
+            );
+
+            if (!verifiedPayment.isCanceledPayment()) {
+                throw new BusinessException(ErrorCode.PAYMENT_CANCEL_FAILED);
+            }
+
+            log.info("[PAYMENT CANCEL VERIFIED] orderId={} | orderNumber={} | paymentKey={} | status={}",
+                    order.getId(),
+                    order.getOrderNumber(),
+                    payment.getPaymentKey(),
+                    verifiedPayment.status());
         }
 
         // 결제 취소 처리

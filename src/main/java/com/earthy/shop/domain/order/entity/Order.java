@@ -87,6 +87,9 @@ public class Order extends BaseTimeEntity {
     // 송장번호
     private String trackingNumber;
 
+    // 취소 사유
+    private String cancelReason;
+
     public Order(
             String orderNumber,
             Member member,
@@ -151,13 +154,14 @@ public class Order extends BaseTimeEntity {
     }
 
     // 주문 취소
-    public void cancel() {
+    public void cancel(String cancelReason) {
         if (this.status != OrderStatus.PENDING
                 && this.status != OrderStatus.PAID
                 && this.status != OrderStatus.PREPARING) {
             throw new BusinessException(ErrorCode.ORDER_NOT_CANCELABLE);
         }
 
+        this.cancelReason = cancelReason;
         this.status = OrderStatus.CANCELED;
     }
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 import {
   findEmail,
   findPassword,
@@ -49,7 +49,12 @@ import {
   type BoardSaveRequest,
   type BoardType,
 } from "./api/boards";
-import { requestTossPayment } from "./api/toss";
+import {
+  clearStoredPortOnePaymentContext,
+  getStoredPortOnePaymentContext,
+  requestPortOnePayment,
+  type PortOnePayMethod,
+} from "./api/portone";
 import marketingConsentText from "./terms/marketing-consent.txt?raw";
 import privacyCollectionText from "./terms/privacy-collection.txt?raw";
 import serviceTermsText from "./terms/service-terms.txt?raw";
@@ -59,6 +64,7 @@ import {
   type Addon,
   type Product,
   type ProductCategory,
+  type ProductSizeOption,
 } from "./data/products";
 
 const DAUM_POSTCODE_SCRIPT_URL = "//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
@@ -74,6 +80,13 @@ const DELIVERY_MEMO_OPTIONS = [
   "택배함에 보관해 주세요.",
 ];
 const CUSTOM_DELIVERY_MEMO = "직접 입력";
+const CUSTOMER_CANCEL_REASON_OPTIONS = [
+  "단순 변심",
+  "주문 실수",
+  "배송지 변경",
+  "결제수단 변경",
+  "기타",
+];
 const BOARD_DEFAULT_CONTENT = `[고객상담 업무시간]
 평일 오전 10시 - 오후 5시 (점심시간 오후 12시 - 1시) / 주말, 공휴일 휴무
 *문의량이 많을 경우 당일 내 답변되지 못하고 1일 후 답변될 수 있습니다.
@@ -195,6 +208,8 @@ interface QuantityControlProps {
   label: string;
   value: number;
   onChange: (value: number) => void;
+  trailingAction?: ReactNode;
+  reserveTrailingAction?: boolean;
 }
 
 interface CartProps {
@@ -204,7 +219,7 @@ interface CartProps {
   loading: boolean;
   error: string | null;
   onOpenDetail: (productId: number) => void;
-  onUpdateQuantity: (cartItemId: number, quantity: number, addonQuantity: number | null) => Promise<void>;
+  onUpdateQuantity: (cartItemId: number, quantity: number) => Promise<void>;
   onRemove: (cartItemId: number) => Promise<void>;
   onCheckout: (cartItemIds?: number[]) => void;
 }
@@ -214,6 +229,7 @@ interface CheckoutProps {
   member: MemberResponse | null;
   onMemberLoaded: (member: MemberResponse) => void;
   onCreateOrder: (requestBody: OrderCreateRequest, idempotencyKey: string) => Promise<OrderResponse>;
+  onRequestPayment: (order: OrderResponse, payMethod: PortOnePayMethod, customerEmail: string) => Promise<void>;
 }
 
 interface PaymentResultProps {
@@ -225,6 +241,7 @@ interface PaymentResultProps {
 
 interface MyPageProps {
   member: MemberResponse | null;
+  initialView: MyPageView;
   orders: OrderResponse[];
   orderPageInfo: OrderPageResponse<OrderResponse>;
   loading: boolean;
@@ -238,7 +255,7 @@ interface MyPageProps {
     detailAddress: string
   ) => Promise<void>;
   onUpdatePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  onCancelOrder: (orderId: number, cancelReason: string) => Promise<void>;
+  onCancelOrder: (orderId: number, cancelReason: string) => Promise<OrderResponse>;
   onDeactivate: () => Promise<void>;
   onLogout: () => void;
 }
@@ -249,6 +266,108 @@ interface AuthPageProps {
 
 // 금액 표기
 const formatWon = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+
+const preventProtectedImageContextMenu = (event: MouseEvent<HTMLImageElement>) => {
+  event.preventDefault();
+};
+
+const preventProtectedImageAreaContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+  event.preventDefault();
+};
+
+const protectedImageProps = (className = "") => ({
+  className: ["protected-image", className].filter(Boolean).join(" "),
+  draggable: false,
+  onContextMenu: preventProtectedImageContextMenu,
+});
+
+// 상품 상세 사이즈 옵션 표기
+const formatSizeOptionLabel = (option: ProductSizeOption) => {
+  if (option.additionalPrice === 0) {
+    return option.sizeName;
+  }
+
+  const pricePrefix = option.additionalPrice > 0 ? "+" : "-";
+  const price = Math.abs(option.additionalPrice).toLocaleString("ko-KR");
+
+  return `${option.sizeName} (${pricePrefix}${price}원)`;
+};
+
+// 상품 상세 추가상품 옵션 표기
+const formatAddonOptionLabel = (addon: Addon) => {
+  if (addon.price === 0) {
+    return addon.name;
+  }
+
+  const pricePrefix = addon.price > 0 ? "+" : "-";
+  const price = Math.abs(addon.price).toLocaleString("ko-KR");
+
+  return `${addon.name} (${pricePrefix}${price}원)`;
+};
+
+// 장바구니 사이즈 옵션 표기
+const formatCartSizeOptionLabel = (item: CartItemResponse) => {
+  if (!item.sizeName) {
+    return null;
+  }
+
+  if (item.sizeAdditionalPrice === 0) {
+    return `사이즈: ${item.sizeName}`;
+  }
+
+  const pricePrefix = item.sizeAdditionalPrice > 0 ? "+" : "-";
+  const price = Math.abs(item.sizeAdditionalPrice).toLocaleString("ko-KR");
+
+  return `사이즈: ${item.sizeName} (${pricePrefix}${price}원)`;
+};
+
+// 주문 상세 사이즈 옵션 표기
+const formatOrderSizeOptionLabel = (item: {
+  sizeName: string | null;
+  sizeAdditionalPrice: number;
+}) => {
+  if (!item.sizeName) {
+    return null;
+  }
+
+  if (item.sizeAdditionalPrice === 0) {
+    return `사이즈: ${item.sizeName}`;
+  }
+
+  const pricePrefix = item.sizeAdditionalPrice > 0 ? "+" : "-";
+  const price = Math.abs(item.sizeAdditionalPrice).toLocaleString("ko-KR");
+
+  return `사이즈: ${item.sizeName} (${pricePrefix}${price}원)`;
+};
+
+// 주문 상세 결제수단 표기
+const formatPaymentMethod = (paymentMethod?: string | null) => {
+  if (!paymentMethod) {
+    return "-";
+  }
+
+  const normalizedMethod = paymentMethod.replace(/[\s_-]/g, "").toUpperCase();
+
+  if (
+    normalizedMethod === "카드" ||
+    normalizedMethod === "카드결제" ||
+    normalizedMethod.includes("CARD") ||
+    normalizedMethod.includes("EASYPAY")
+  ) {
+    return "카드결제";
+  }
+
+  if (
+    normalizedMethod === "휴대폰" ||
+    normalizedMethod === "휴대폰결제" ||
+    normalizedMethod.includes("MOBILE") ||
+    normalizedMethod.includes("PHONE")
+  ) {
+    return "휴대폰결제";
+  }
+
+  return paymentMethod;
+};
 
 // 우체국 배송조회 새 창 열기
 const openPostOfficeTracking = (trackingNumber?: string | null) => {
@@ -464,6 +583,7 @@ function App() {
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem("earthyAccessToken"));
   const [authPageKey, setAuthPageKey] = useState(0);
   const [myPageKey, setMyPageKey] = useState(0);
+  const [myPageInitialView, setMyPageInitialView] = useState<MyPageView>("home");
   const [member, setMember] = useState<MemberResponse | null>(null);
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [orderPageInfo, setOrderPageInfo] = useState<OrderPageResponse<OrderResponse>>(() => createEmptyPage<OrderResponse>());
@@ -485,6 +605,19 @@ function App() {
     ? cartItems.filter((item) => checkoutCartItemIds.includes(item.cartItemId))
     : cartItems;
   const checkoutTotal = checkoutItems.reduce((sum, item) => sum + item.itemTotalPrice, 0);
+
+  // 고객용 사이트 전체 우클릭 메뉴 차단
+  useEffect(() => {
+    const preventCustomerContextMenu = (event: Event) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener("contextmenu", preventCustomerContextMenu);
+
+    return () => {
+      document.removeEventListener("contextmenu", preventCustomerContextMenu);
+    };
+  }, []);
 
   useEffect(() => {
     setProductPage(0);
@@ -672,18 +805,147 @@ function App() {
     await loadCart();
   };
 
-  // 토스 결제 결과 콜백 처리
+  // PortOne 결제창 요청 후 서버 승인 처리
+  const requestAndConfirmPortOnePayment = async (
+    order: OrderResponse,
+    payMethod: PortOnePayMethod = "CARD",
+    customerEmail = member?.email ?? ""
+  ) => {
+    setPaymentResult({ status: "processing", message: "결제창을 여는 중입니다." });
+    setPage("paymentResult");
+
+    try {
+      const portOnePaymentId = await requestPortOnePayment(order, payMethod, customerEmail);
+      setPaymentResult({ status: "processing", message: "결제 승인 중입니다." });
+
+      const payment = await confirmPayment(
+        {
+          orderId: order.orderId,
+          paymentId: portOnePaymentId,
+          amount: order.totalPrice,
+        },
+        getOrCreatePaymentConfirmKey(order.orderNumber)
+      );
+
+      await clearPaidCartItems(order.orderNumber);
+      sessionStorage.removeItem(`earthyPaymentOrder:${order.orderNumber}`);
+      sessionStorage.removeItem(`earthyPaymentOrderData:${order.orderNumber}`);
+      sessionStorage.removeItem(`earthyPaymentConfirmKey:${order.orderNumber}`);
+      clearStoredPortOnePaymentContext(portOnePaymentId);
+      await loadMyPage();
+
+      setPaymentResult({
+        status: "success",
+        message: "결제가 완료되었습니다.",
+        payment,
+      });
+    } catch (paymentError) {
+      setPaymentResult({
+        status: "fail",
+        message: paymentError instanceof Error ? paymentError.message : "결제 요청 실패",
+        retryOrder: order,
+        showCancelNotice: true,
+      });
+    }
+  };
+
+  // 결제 결과 콜백 처리
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const result = params.get("paymentResult");
 
-    if (result !== "success" && result !== "fail") {
+    if (result !== "success" && result !== "fail" && result !== "portone") {
       return;
     }
 
     const cleanPaymentUrl = () => {
       window.history.replaceState({}, "", window.location.pathname);
     };
+
+    if (result === "portone") {
+      const portOnePaymentId = params.get("paymentId") ?? params.get("payment_id");
+      const portOneErrorCode = params.get("code");
+      const portOneErrorMessage = params.get("message");
+      const storedContext = portOnePaymentId ? getStoredPortOnePaymentContext(portOnePaymentId) : undefined;
+      const storedRetryOrder = getStoredPaymentOrder(storedContext?.orderNumber ?? null);
+
+      if (portOneErrorCode) {
+        setPaymentResult({
+          status: "fail",
+          message: portOneErrorMessage ?? "결제가 취소되었거나 실패했습니다.",
+          retryOrder: storedRetryOrder,
+          showCancelNotice: true,
+        });
+        setPage("paymentResult");
+        cleanPaymentUrl();
+        return;
+      }
+
+      if (!portOnePaymentId || !storedContext) {
+        setPaymentResult({
+          status: "fail",
+          message: "결제 승인에 필요한 정보가 없습니다. 주문 내역을 확인해주세요.",
+          retryOrder: storedRetryOrder,
+          showCancelNotice: Boolean(storedRetryOrder),
+        });
+        setPage("paymentResult");
+        cleanPaymentUrl();
+        return;
+      }
+
+      const confirmedPortOnePaymentId = portOnePaymentId;
+      const confirmedPortOneContext = storedContext;
+
+      setPaymentResult({ status: "processing", message: "결제 승인 중입니다." });
+      setPage("paymentResult");
+      cleanPaymentUrl();
+
+      // PortOne 모바일 redirect 결제 승인
+      async function approvePortOnePayment() {
+        try {
+          const payment = await confirmPayment(
+            {
+              orderId: confirmedPortOneContext.orderId,
+              paymentId: confirmedPortOnePaymentId,
+              amount: confirmedPortOneContext.amount,
+            },
+            getOrCreatePaymentConfirmKey(confirmedPortOneContext.orderNumber)
+          );
+
+          await clearPaidCartItems(confirmedPortOneContext.orderNumber);
+          sessionStorage.removeItem(`earthyPaymentOrder:${confirmedPortOneContext.orderNumber}`);
+          sessionStorage.removeItem(`earthyPaymentOrderData:${confirmedPortOneContext.orderNumber}`);
+          sessionStorage.removeItem(`earthyPaymentConfirmKey:${confirmedPortOneContext.orderNumber}`);
+          clearStoredPortOnePaymentContext(confirmedPortOnePaymentId);
+          await loadMyPage();
+          setPaymentResult({
+            status: "success",
+            message: "결제가 완료되었습니다.",
+            payment,
+          });
+        } catch (paymentError) {
+          let retryOrder: OrderResponse | undefined = storedRetryOrder;
+
+          if (!retryOrder) {
+            try {
+              retryOrder = await getMyOrder(confirmedPortOneContext.orderId);
+            } catch {
+              retryOrder = undefined;
+            }
+          }
+
+          setPaymentResult({
+            status: "fail",
+            message: paymentError instanceof Error ? paymentError.message : "결제 승인 실패",
+            retryOrder,
+            showCancelNotice: false,
+          });
+        }
+      }
+
+      void approvePortOnePayment();
+      return;
+    }
 
     const paymentKey = params.get("paymentKey");
     const tossOrderNumber = params.get("orderId");
@@ -692,8 +954,6 @@ function App() {
     const storedRetryOrder = getStoredPaymentOrder(tossOrderNumber);
 
     if (result === "fail") {
-      const failedOrderId = storedOrderId ? Number(storedOrderId) : null;
-
       setPaymentResult({
         status: "fail",
         message: params.get("message") ?? "결제가 취소되었거나 실패했습니다.",
@@ -702,29 +962,6 @@ function App() {
       });
       setPage("paymentResult");
       cleanPaymentUrl();
-
-      if (failedOrderId) {
-        void getMyOrder(failedOrderId)
-          .then((retryOrder) => {
-            setPaymentResult({
-              status: "fail",
-              message: params.get("message") ?? "결제가 취소되었거나 실패했습니다.",
-              retryOrder,
-              showCancelNotice: true,
-            });
-          })
-          .catch(() => {
-            setPaymentResult({
-              status: "fail",
-              message: storedRetryOrder
-                ? params.get("message") ?? "결제가 취소되었거나 실패했습니다."
-                : "결제가 취소되었습니다. 주문 내역에서 다시 확인해주세요.",
-              retryOrder: storedRetryOrder,
-              showCancelNotice: true,
-            });
-          });
-      }
-
       return;
     }
 
@@ -754,6 +991,7 @@ function App() {
         const payment = await confirmPayment(
           {
             orderId: confirmedOrderId,
+            paymentId: confirmedPaymentKey,
             paymentKey: confirmedPaymentKey,
             amount: confirmedAmount,
           },
@@ -897,12 +1135,8 @@ function App() {
   };
 
   // 장바구니 수량 변경
-  const updateCartQuantity = async (
-    cartItemId: number,
-    quantity: number,
-    addonQuantity: number | null
-  ) => {
-    const cart = await updateCartItemQuantity(cartItemId, { quantity, addonQuantity });
+  const updateCartQuantity = async (cartItemId: number, quantity: number) => {
+    const cart = await updateCartItemQuantity(cartItemId, { quantity, addonQuantity: null });
     setCartItems(cart.items);
   };
 
@@ -920,6 +1154,8 @@ function App() {
     }, idempotencyKey);
 
     const orderedCartItemIds = checkoutCartItemIds ?? cartItems.map((item) => item.cartItemId);
+    sessionStorage.setItem(`earthyPaymentOrder:${order.orderNumber}`, String(order.orderId));
+    sessionStorage.setItem(`earthyPaymentOrderData:${order.orderNumber}`, JSON.stringify(order));
     storePaymentCartItemIds(order.orderNumber, orderedCartItemIds);
     storePaymentConfirmKey(order.orderNumber, createIdempotencyKey());
 
@@ -929,9 +1165,13 @@ function App() {
   // 결제 재시도
   const retryPayment = async (order: OrderResponse) => {
     setPaymentResult({ status: "processing", message: "결제창을 다시 여는 중입니다." });
+    setPage("paymentResult");
 
     try {
-      await requestTossPayment(order);
+      sessionStorage.setItem(`earthyPaymentOrder:${order.orderNumber}`, String(order.orderId));
+      sessionStorage.setItem(`earthyPaymentOrderData:${order.orderNumber}`, JSON.stringify(order));
+      storePaymentConfirmKey(order.orderNumber, createIdempotencyKey());
+      await requestAndConfirmPortOnePayment(order, "CARD", member?.email ?? "");
     } catch (retryError) {
       setPaymentResult({
         status: "fail",
@@ -945,6 +1185,7 @@ function App() {
   // 계정 아이콘 이동
   const openAccount = () => {
     if (accessToken) {
+      setMyPageInitialView("home");
       setMyPageKey((key) => key + 1);
       setPage("mypage");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -985,6 +1226,7 @@ function App() {
     setOrders((prevOrders) =>
       prevOrders.map((order) => (order.orderId === orderId ? updatedOrder : order))
     );
+    return updatedOrder;
   };
 
   // 회원 탈퇴
@@ -1090,6 +1332,7 @@ function App() {
             member={member}
             onMemberLoaded={setMember}
             onCreateOrder={submitOrder}
+            onRequestPayment={requestAndConfirmPortOnePayment}
           />
         )}
         {page === "paymentResult" && paymentResult && (
@@ -1097,6 +1340,7 @@ function App() {
             result={paymentResult}
             onRetryPayment={retryPayment}
             onMoveOrders={() => {
+              setMyPageInitialView("orders");
               setMyPageKey((key) => key + 1);
               setPage("mypage");
               window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1111,6 +1355,7 @@ function App() {
           <MyPage
             key={myPageKey}
             member={member}
+            initialView={myPageInitialView}
             orders={orders}
             orderPageInfo={orderPageInfo}
             loading={myPageLoading}
@@ -1218,8 +1463,19 @@ function Header({
         <span />
         <span />
       </button>
+      {menuOpen && (
+        <button
+          className="mobile-menu-backdrop"
+          type="button"
+          aria-label="메뉴 닫기"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
 
       <nav className={`main-nav ${menuOpen ? "is-open" : ""}`} aria-label="주요 메뉴">
+        <button className="mobile-menu-close" type="button" aria-label="메뉴 닫기" onClick={() => setMenuOpen(false)}>
+          ×
+        </button>
         <div className="nav-row">
           <button className={page === "home" ? "is-active" : ""} type="button" onClick={handleHome}>
             HOME
@@ -1287,7 +1543,9 @@ function Header({
           </svg>
         </button>
         <button
-          className={`icon-button ${page === "auth" || page === "mypage" || loggedIn ? "is-active" : ""}`}
+          className={`icon-button account-button ${page === "auth" || page === "mypage" || loggedIn ? "is-active" : ""} ${
+            page === "mypage" ? "is-mypage-active" : ""
+          }`}
           type="button"
           aria-label={loggedIn ? "마이페이지" : "로그인"}
           onClick={handleAuth}
@@ -1343,7 +1601,7 @@ function Home({ onHome }: { onHome: () => void }) {
   return (
     <section className="home-view">
       <button className="home-photo" type="button" onClick={onHome} aria-label="홈으로 이동">
-        <img src="/assets/field-postcard.jpeg" alt="풀 언덕 풍경 엽서" />
+        <img {...protectedImageProps()} src="/assets/field-postcard.jpeg" alt="풀 언덕 풍경 엽서" />
       </button>
     </section>
   );
@@ -1896,12 +2154,12 @@ function Shop({ category, products, pageInfo, loading, error, onOpenDetail, onCh
         <div className="product-grid">
           {products.map((product) => (
             <button
-              className={`product-item ${product.soldOut ? "is-sold-out" : ""}`}
+              className={`product-item ${product.category === "POSTER" ? "is-poster" : ""} ${product.category === "POSTCARD" ? "is-postcard" : ""} ${product.soldOut ? "is-sold-out" : ""}`}
               type="button"
               key={product.id}
               onClick={() => onOpenDetail(product.id)}
             >
-              <img src={product.imageUrl} alt={product.name} />
+              <img {...protectedImageProps()} src={product.imageUrl} alt={product.name} />
               <strong>{product.name}</strong>
               <small>{product.soldOut ? "SOLD OUT" : formatWon(product.price)}</small>
             </button>
@@ -2001,12 +2259,12 @@ function SearchPage({ onOpenDetail }: SearchPageProps) {
           <div className="product-grid">
             {products.map((product) => (
               <button
-                className={`product-item ${product.soldOut ? "is-sold-out" : ""}`}
+                className={`product-item ${product.category === "POSTER" ? "is-poster" : ""} ${product.category === "POSTCARD" ? "is-postcard" : ""} ${product.soldOut ? "is-sold-out" : ""}`}
                 type="button"
                 key={product.id}
                 onClick={() => onOpenDetail(product.id)}
               >
-                <img src={product.imageUrl} alt={product.name} />
+                <img {...protectedImageProps()} src={product.imageUrl} alt={product.name} />
                 <strong>{product.name}</strong>
                 <small>{product.soldOut ? "SOLD OUT" : formatWon(product.price)}</small>
               </button>
@@ -2072,8 +2330,6 @@ function Pagination<T>({
   );
 }
 
-const DEFAULT_PRODUCT_DETAIL_IMAGE_URL = "/assets/products/details/postcard-detail.jpeg";
-
 function ProductDetail({
   product,
   loading,
@@ -2082,16 +2338,20 @@ function ProductDetail({
   onBuyNow,
 }: ProductDetailProps) {
   const [quantity, setQuantity] = useState(1);
-  const [addonId, setAddonId] = useState("");
-  const [addonQuantity, setAddonQuantity] = useState(1);
+  const [sizeOptionId, setSizeOptionId] = useState("");
+  const [sizeOptionsOpen, setSizeOptionsOpen] = useState(false);
+  const [selectedAddons, setSelectedAddons] = useState<Record<number, number>>({});
+  const [openAddonGroups, setOpenAddonGroups] = useState<Record<string, boolean>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
   useEffect(() => {
     setQuantity(1);
-    setAddonId("");
-    setAddonQuantity(1);
+    setSizeOptionId("");
+    setSizeOptionsOpen(false);
+    setSelectedAddons({});
+    setOpenAddonGroups({});
   }, [product?.id]);
 
   if (loading) {
@@ -2111,19 +2371,71 @@ function ProductDetail({
   }
 
   const productAddons: Addon[] = product.addons ?? [];
-  const selectedAddon = productAddons.find((addon) => addon.id === Number(addonId));
-  const orderDisabled = submitting || product.soldOut || Boolean(selectedAddon?.soldOut);
-  const addonTotal = selectedAddon ? selectedAddon.price * addonQuantity : 0;
-  const productTotal = product.price * quantity;
+  const sizeOptions = product.sizeOptions ?? [];
+  const selectedSizeOption = sizeOptions.find((option) => option.id === Number(sizeOptionId));
+  const selectedProductAddons = productAddons.filter((addon) => selectedAddons[addon.id]);
+  const groupedAddons = productAddons.reduce<Record<string, Addon[]>>((groups, addon) => {
+    const groupName = addon.typeDescription || addon.type;
+    groups[groupName] = [...(groups[groupName] ?? []), addon];
+    return groups;
+  }, {});
+  const orderDisabled = submitting || product.soldOut;
+  const unitPrice = product.category === "POSTER" && selectedSizeOption
+    ? product.price + selectedSizeOption.additionalPrice
+    : product.price;
+  const addonTotal = selectedProductAddons.reduce(
+    (total, addon) => total + addon.price * selectedAddons[addon.id],
+    0
+  );
+  const productTotal = unitPrice * quantity;
   const totalPrice = productTotal + addonTotal;
-  const detailImageUrl = product.detailImageUrl || DEFAULT_PRODUCT_DETAIL_IMAGE_URL;
 
   const createCartRequest = (): CartItemAddRequest => ({
       productId: product.id,
-      addonId: selectedAddon?.id ?? null,
-      addonQuantity: selectedAddon ? addonQuantity : null,
+      productSizeOptionId: selectedSizeOption?.id ?? null,
+      addonId: null,
+      addonQuantity: null,
+      addons: selectedProductAddons.map((addon) => ({
+        addonId: addon.id,
+        quantity: selectedAddons[addon.id],
+      })),
       quantity,
   });
+
+  const selectAddon = (addonId: number) => {
+    setSelectedAddons((prevAddons) => {
+      if (prevAddons[addonId]) {
+        return prevAddons;
+      }
+
+      return {
+        ...prevAddons,
+        [addonId]: 1,
+      };
+    });
+  };
+
+  const removeSelectedAddon = (addonId: number) => {
+    setSelectedAddons((prevAddons) => {
+      const nextAddons = { ...prevAddons };
+      delete nextAddons[addonId];
+      return nextAddons;
+    });
+  };
+
+  const toggleAddonGroup = (groupName: string) => {
+    setOpenAddonGroups((prevGroups) => ({
+      ...prevGroups,
+      [groupName]: !prevGroups[groupName],
+    }));
+  };
+
+  const updateSelectedAddonQuantity = (addonId: number, nextQuantity: number) => {
+    setSelectedAddons((prevAddons) => ({
+      ...prevAddons,
+      [addonId]: Math.max(1, nextQuantity),
+    }));
+  };
 
   const handleCartAction = async (action: "cart" | "buy") => {
     if (submittingRef.current) {
@@ -2135,12 +2447,14 @@ function ProductDetail({
     setSubmitError(null);
 
     if (product.soldOut) {
+      submittingRef.current = false;
       setSubmitting(false);
       return;
     }
 
-    if (selectedAddon?.soldOut) {
-      setSubmitError("품절된 추가상품입니다.");
+    if (product.category === "POSTER" && !selectedSizeOption) {
+      setSubmitError("사이즈를 선택해주세요.");
+      submittingRef.current = false;
       setSubmitting(false);
       return;
     }
@@ -2163,7 +2477,7 @@ function ProductDetail({
   return (
     <section className="page-view detail-view">
       <div className="detail-layout">
-        <img className="detail-image" src={product.imageUrl} alt={product.name} />
+        <img {...protectedImageProps("detail-image")} src={product.imageUrl} alt={product.name} />
 
         <article className="detail-panel">
           <h1>{product.name}</h1>
@@ -2181,37 +2495,147 @@ function ProductDetail({
             </div>
           </dl>
 
-          {product.category === "POSTER" && (
+          {(product.category === "POSTER" || productAddons.length > 0) && (
             <div className="addon-box">
-              <label>
-                추가상품
-                <select value={addonId} onChange={(event) => setAddonId(event.target.value)}>
-                  <option value="">선택 안 함</option>
-                  {productAddons.map((addon) => (
-                    <option value={addon.id} key={addon.id} disabled={addon.soldOut}>
-                      {addon.name} +{formatWon(addon.price)}{addon.soldOut ? " SOLD OUT" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {product.category === "POSTER" && (
+                <div className="option-choice-group">
+                  <span className="option-section-title">사이즈</span>
+                  <div className={`option-control addon-group-header ${sizeOptionsOpen ? "is-open" : ""}`}>
+                    <button
+                      className="addon-group-toggle"
+                      type="button"
+                      onClick={() => setSizeOptionsOpen((isOpen) => !isOpen)}
+                      aria-expanded={sizeOptionsOpen}
+                    >
+                      <span>{selectedSizeOption ? formatSizeOptionLabel(selectedSizeOption) : "사이즈 선택"}</span>
+                    </button>
+                    <div className="addon-group-actions">
+                      <span aria-hidden="true">{sizeOptionsOpen ? "⌃" : "⌄"}</span>
+                    </div>
+                  </div>
+                  {sizeOptionsOpen && (
+                    <div className="addon-option-list">
+                      {sizeOptions.map((option) => {
+                        const disabled = !option.active || option.soldOut;
 
-              {selectedAddon && (
-                <QuantityControl label="추가상품 수량" value={addonQuantity} onChange={setAddonQuantity} />
+                        return (
+                          <div
+                            className={`addon-option-row ${sizeOptionId === String(option.id) ? "is-selected" : ""} ${disabled ? "is-disabled" : ""}`}
+                            key={option.id}
+                          >
+                            <button
+                              className="addon-option-button"
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => {
+                                setSizeOptionId(String(option.id));
+                                setSizeOptionsOpen(false);
+                              }}
+                            >
+                              <span>{formatSizeOptionLabel(option)}</span>
+                              {option.soldOut && <small>SOLD OUT</small>}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              {productAddons.length > 0 && (
+                <div className="addon-choice-list">
+                  <span className="addon-choice-heading">추가상품</span>
+                  {Object.entries(groupedAddons).map(([groupName, addons]) => {
+                    const isOpen = Boolean(openAddonGroups[groupName]);
+
+                    return (
+                      <div className="addon-choice-group" key={groupName}>
+                        <div className={`option-control addon-group-header ${isOpen ? "is-open" : ""}`}>
+                          <button
+                            className="addon-group-toggle"
+                            type="button"
+                            onClick={() => toggleAddonGroup(groupName)}
+                            aria-expanded={isOpen}
+                          >
+                            <span>{groupName}</span>
+                          </button>
+                          <div className="addon-group-actions">
+                            <span aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span>
+                          </div>
+                        </div>
+                        {isOpen && (
+                          <div className="addon-option-list">
+                            {addons.map((addon) => (
+                              <div
+                                className={`addon-option-row ${selectedAddons[addon.id] ? "is-selected" : ""} ${addon.soldOut ? "is-disabled" : ""}`}
+                                key={addon.id}
+                              >
+                                <button
+                                  className="addon-option-button"
+                                  type="button"
+                                  disabled={addon.soldOut}
+                                  onClick={() => selectAddon(addon.id)}
+                                >
+                                  <span>{formatAddonOptionLabel(addon)}</span>
+                                  {addon.soldOut && <small>SOLD OUT</small>}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {selectedProductAddons.length > 0 && (
+                    <div className="selected-addon-quantity-box">
+                      <span>추가상품 수량</span>
+                      <div className="selected-addon-quantity-list">
+                        {selectedProductAddons.map((addon) => (
+                          <QuantityControl
+                            key={addon.id}
+                            label={addon.name}
+                            value={selectedAddons[addon.id]}
+                            onChange={(nextQuantity) => updateSelectedAddonQuantity(addon.id, nextQuantity)}
+                            trailingAction={
+                              <button
+                                className="addon-quantity-clear"
+                                aria-label={`${addon.name} 선택 해제`}
+                                type="button"
+                                onClick={() => removeSelectedAddon(addon.id)}
+                              >
+                                ×
+                              </button>
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
 
-          <QuantityControl label="수량" value={quantity} onChange={setQuantity} />
+          {selectedProductAddons.length > 0 && <div className="detail-section-divider" />}
+
+          <QuantityControl
+            label="상품 수량"
+            value={quantity}
+            onChange={setQuantity}
+            reserveTrailingAction={selectedProductAddons.length > 0}
+          />
+
+          <div className="detail-section-divider" />
 
           <div className="summary-box">
             <p>
               <span>주문 수량</span>
               <strong>{quantity}개</strong>
             </p>
-            {selectedAddon && (
+            {selectedProductAddons.length > 0 && (
               <p>
-                <span>추가상품 수량</span>
-                <strong>{addonQuantity}개</strong>
+                <span>추가상품 금액</span>
+                <strong>{formatWon(addonTotal)}</strong>
               </p>
             )}
             <p>
@@ -2232,16 +2656,26 @@ function ProductDetail({
           </div>
         </article>
       </div>
-      <div className="product-detail-content">
-        <img src={detailImageUrl} alt={`${product.name} 상세 이미지`} />
-      </div>
+      {product.detailImageUrl && (
+        <div className="product-detail-content">
+          <img {...protectedImageProps()} src={product.detailImageUrl} alt={`${product.name} 상세 이미지`} />
+        </div>
+      )}
     </section>
   );
 }
 
-function QuantityControl({ label, value, onChange }: QuantityControlProps) {
+function QuantityControl({
+  label,
+  value,
+  onChange,
+  trailingAction,
+  reserveTrailingAction = false,
+}: QuantityControlProps) {
+  const hasTrailingAction = Boolean(trailingAction) || reserveTrailingAction;
+
   return (
-    <div className="quantity-row">
+    <div className={`quantity-row ${hasTrailingAction ? "has-trailing-action" : ""}`}>
       <span>{label}</span>
       <div>
         <button type="button" onClick={() => onChange(Math.max(1, value - 1))} aria-label={`${label} 줄이기`}>
@@ -2252,6 +2686,7 @@ function QuantityControl({ label, value, onChange }: QuantityControlProps) {
           +
         </button>
       </div>
+      {hasTrailingAction && <span className="quantity-row-action">{trailingAction}</span>}
     </div>
   );
 }
@@ -2298,13 +2733,12 @@ function Cart({
   // 장바구니 수량 변경
   const handleUpdateQuantity = async (
     cartItemId: number,
-    quantity: number,
-    addonQuantity: number | null
+    quantity: number
   ) => {
     setActionError(null);
 
     try {
-      await onUpdateQuantity(cartItemId, quantity, addonQuantity);
+      await onUpdateQuantity(cartItemId, quantity);
     } catch (updateError) {
       setActionError(updateError instanceof Error ? updateError.message : "수량 변경 실패");
     }
@@ -2350,12 +2784,12 @@ function Cart({
             {items.map((item) => (
               <article className="cart-item" key={item.cartItemId}>
                 <button
-                  className="cart-product-image"
+                  className={`cart-product-image ${item.sizeName ? "" : "is-square-thumbnail"}`}
                   type="button"
                   onClick={() => onOpenDetail(item.productId)}
                   aria-label={`${item.productName} 상세보기`}
                 >
-                  <img src={item.productImageUrl} alt={item.productName} />
+                  <img {...protectedImageProps()} src={item.productImageUrl} alt={item.productName} />
                 </button>
                 <div className="cart-item-info">
                   <button
@@ -2365,75 +2799,36 @@ function Cart({
                   >
                     {item.productName}
                   </button>
-                  {item.addonName && <span>[추가상품: {item.addonName} {item.addonQuantity}개]</span>}
-                  <p>{formatWon(item.itemTotalPrice)}</p>
-                  {item.addonName && <small>{item.addonName} {formatWon(item.addonPrice)}</small>}
+                  <p>{formatWon(item.sizeName ? item.productPrice : item.itemTotalPrice)}</p>
+                  {item.sizeName && <span>{formatCartSizeOptionLabel(item)}</span>}
+                  {(item.addons ?? []).map((addon) => (
+                    <span key={addon.cartItemAddonId}>
+                      추가상품: {addon.addonName} (+{formatWon(addon.addonPrice)}) {addon.quantity}개
+                    </span>
+                  ))}
+                  {(item.addons ?? []).length === 0 && item.addonName && (
+                    <span>추가상품: {item.addonName} (+{formatWon(item.addonPrice)}) {item.addonQuantity}개</span>
+                  )}
                   <div className="cart-quantity-row">
                     <span>상품</span>
                     <div className="cart-quantity">
                       <output>{item.quantity}</output>
                       <button
                         type="button"
-                        onClick={() =>
-                          void handleUpdateQuantity(
-                            item.cartItemId,
-                            item.quantity + 1,
-                            item.addonId ? item.addonQuantity : null
-                          )
-                        }
+                        onClick={() => void handleUpdateQuantity(item.cartItemId, item.quantity + 1)}
                         aria-label={`${item.productName} 수량 늘리기`}
                       >
                         +
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          void handleUpdateQuantity(
-                            item.cartItemId,
-                            Math.max(1, item.quantity - 1),
-                            item.addonId ? item.addonQuantity : null
-                          )
-                        }
+                        onClick={() => void handleUpdateQuantity(item.cartItemId, Math.max(1, item.quantity - 1))}
                         aria-label={`${item.productName} 수량 줄이기`}
                       >
                         −
                       </button>
                     </div>
                   </div>
-                  {item.addonName && (
-                    <div className="cart-quantity-row">
-                      <span>추가상품</span>
-                      <div className="cart-quantity">
-                        <output>{item.addonQuantity}</output>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleUpdateQuantity(
-                              item.cartItemId,
-                              item.quantity,
-                              item.addonQuantity + 1
-                            )
-                          }
-                          aria-label={`${item.addonName} 수량 늘리기`}
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleUpdateQuantity(
-                              item.cartItemId,
-                              item.quantity,
-                              Math.max(1, item.addonQuantity - 1)
-                            )
-                          }
-                          aria-label={`${item.addonName} 수량 줄이기`}
-                        >
-                          −
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
                 <label className="cart-item-check">
                   <input
@@ -2496,7 +2891,7 @@ function Cart({
   );
 }
 
-function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: CheckoutProps) {
+function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder, onRequestPayment }: CheckoutProps) {
   // 주문서 결제예정금액
   const deliveryFee = calculateDeliveryFee(totalPrice);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -2519,6 +2914,8 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
   const [phoneLast, setPhoneLast] = useState("");
   const [deliveryMemoType, setDeliveryMemoType] = useState("");
   const [postcodeOpen, setPostcodeOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PortOnePayMethod>("CARD");
+  const [customerEmail, setCustomerEmail] = useState(member?.email ?? "");
 
   const remoteAreaDeliveryFee = calculateRemoteAreaDeliveryFee(form.zipCode, form.address);
   const paymentTotal = totalPrice + deliveryFee + remoteAreaDeliveryFee;
@@ -2526,6 +2923,8 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
 
   // 회원 정보로 수령인 기본값 채움
   const applyMemberContact = (nextMember: MemberResponse) => {
+    setCustomerEmail(nextMember.email);
+
     setForm((prevForm) => ({
       ...prevForm,
       receiverName: prevForm.receiverName || nextMember.name,
@@ -2655,7 +3054,7 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
     };
   }, [termsOpen, postcodeOpen]);
 
-  // 주문 생성 후 토스 결제창 이동
+  // 주문 생성 후 PortOne 결제창 요청
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!allTermsAgreed) {
@@ -2669,8 +3068,15 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
     try {
       idempotencyKeyRef.current ??= createIdempotencyKey();
 
+      const normalizedCustomerEmail = customerEmail.trim();
+
+      if (!normalizedCustomerEmail) {
+        setError("회원 이메일을 확인할 수 없어 결제를 진행할 수 없습니다.");
+        return;
+      }
+
       const order = await onCreateOrder(form, idempotencyKeyRef.current);
-      await requestTossPayment(order);
+      await onRequestPayment(order, paymentMethod, normalizedCustomerEmail);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "결제 요청 실패");
     } finally {
@@ -2812,6 +3218,38 @@ function Checkout({ totalPrice, member, onMemberLoaded, onCreateOrder }: Checkou
               <span>지역별 배송비</span>
               <strong>{formatWon(remoteAreaDeliveryFee)}</strong>
             </p>
+          </div>
+
+          <div className="payment-methods">
+            <h2>결제수단</h2>
+            <div className="payment-method-options" role="radiogroup" aria-label="결제수단 선택">
+              <button
+                type="button"
+                className={paymentMethod === "CARD" ? "is-active" : ""}
+                role="radio"
+                aria-checked={paymentMethod === "CARD"}
+                onClick={() => setPaymentMethod("CARD")}
+              >
+                <span className="payment-method-radio" aria-hidden="true" />
+                <span className="payment-method-text">
+                  <strong>카드</strong>
+                  <small>신용/체크카드</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className={paymentMethod === "MOBILE" ? "is-active" : ""}
+                role="radio"
+                aria-checked={paymentMethod === "MOBILE"}
+                onClick={() => setPaymentMethod("MOBILE")}
+              >
+                <span className="payment-method-radio" aria-hidden="true" />
+                <span className="payment-method-text">
+                  <strong>휴대폰</strong>
+                  <small>통신사 결제</small>
+                </span>
+              </button>
+            </div>
           </div>
 
           <div className="payment-terms">
@@ -3030,6 +3468,7 @@ function PaymentResult({ result, onRetryPayment, onMoveOrders, onMoveCart }: Pay
 
 function MyPage({
   member,
+  initialView,
   orders,
   orderPageInfo,
   loading,
@@ -3053,9 +3492,12 @@ function MyPage({
     newPassword: "",
     newPasswordConfirm: "",
   });
-  const [cancelReasons, setCancelReasons] = useState<Record<number, string>>({});
+  const [cancelReasonSelections, setCancelReasonSelections] = useState<Record<number, string>>({});
+  const [cancelCustomReasons, setCancelCustomReasons] = useState<Record<number, string>>({});
+  const [cancelReasonError, setCancelReasonError] = useState("");
   const [cancelReasonOrderId, setCancelReasonOrderId] = useState<number | null>(null);
-  const [view, setView] = useState<MyPageView>("home");
+  const [cancelOrderSubmitting, setCancelOrderSubmitting] = useState(false);
+  const [view, setView] = useState<MyPageView>(initialView);
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState("");
@@ -3233,21 +3675,43 @@ function MyPage({
   };
 
   const handleCancelOrder = async (orderId: number) => {
+    if (cancelOrderSubmitting) {
+      return;
+    }
+
     setMessage(null);
     setActionError(null);
+    setCancelReasonError("");
+
+    const selectedReason = cancelReasonSelections[orderId] ?? "";
+    const customReason = cancelCustomReasons[orderId]?.trim() ?? "";
+
+    if (!selectedReason) {
+      setCancelReasonError("취소 사유를 선택해주세요.");
+      return;
+    }
+
+    if (selectedReason === "기타" && !customReason) {
+      setCancelReasonError("취소 사유를 입력해주세요.");
+      return;
+    }
+
+    const cancelReason = selectedReason === "기타" ? customReason : selectedReason;
+    setCancelOrderSubmitting(true);
 
     try {
-      await onCancelOrder(orderId, cancelReasons[orderId] ?? "");
-      const canceledOrder = orders.find((order) => order.orderId === orderId);
+      const canceledOrder = await onCancelOrder(orderId, cancelReason);
 
-      if (selectedOrder?.orderId === orderId && canceledOrder) {
-        setSelectedOrder({ ...canceledOrder, status: "CANCELED", statusDescription: "주문 취소" });
+      if (selectedOrder?.orderId === orderId) {
+        setSelectedOrder(canceledOrder);
       }
 
       setCancelReasonOrderId(null);
       setToastMessage("주문이 취소되었습니다.");
     } catch (cancelError) {
       setActionError(cancelError instanceof Error ? cancelError.message : "주문 취소 실패");
+    } finally {
+      setCancelOrderSubmitting(false);
     }
   };
 
@@ -3255,10 +3719,16 @@ function MyPage({
     setCancelReasonOrderId(orderId);
     setMessage(null);
     setActionError(null);
+    setCancelReasonError("");
   };
 
   const closeCancelReasonModal = () => {
+    if (cancelOrderSubmitting) {
+      return;
+    }
+
     setCancelReasonOrderId(null);
+    setCancelReasonError("");
   };
 
   const handleDeactivate = async () => {
@@ -3363,16 +3833,17 @@ function MyPage({
                     <div className="order-list-main">
                       {firstItem && (
                         <div className="order-list-body">
-                          <img src={firstItem.productImageUrl} alt={firstItem.productName} />
+                          <img
+                            {...protectedImageProps(firstItem.sizeName ? "" : "is-square-thumbnail")}
+                            src={firstItem.productImageUrl}
+                            alt={firstItem.productName}
+                          />
                           <div className="order-list-product">
                             <strong>
                               {firstItem.productName}
                               {extraItemCount > 0 && ` 외 ${extraItemCount}개`}
                             </strong>
-                            <span>
-                              {formatWon(firstItem.itemTotalPrice)}
-                              {firstItem.quantity > 1 && ` (${firstItem.quantity}개)`}
-                            </span>
+                            <span>{formatWon(order.totalPrice)}</span>
                             {firstItem.addonName && (
                               <small>
                                 [추가상품: {firstItem.addonName} {firstItem.addonQuantity}개]
@@ -3430,29 +3901,34 @@ function MyPage({
             </section>
 
             <section className="order-detail-block">
-              <h2>
-                주문상품
-                <span>
-                  총 {selectedOrder.items.length}개 / {formatWon(selectedOrder.totalPrice)}
-                </span>
-              </h2>
+              <h2>주문상품</h2>
               <ul className="order-detail-products">
                 {selectedOrder.items.map((item) => (
                   <li key={item.orderItemId}>
-                    <img src={item.productImageUrl} alt={item.productName} />
+                    <img
+                      {...protectedImageProps(item.sizeName ? "" : "is-square-thumbnail")}
+                      src={item.productImageUrl}
+                      alt={item.productName}
+                    />
                     <div>
                       <strong>{item.productName}</strong>
                       <span>
-                        {formatWon(item.productPrice)} ({item.quantity}개)
+                        {formatWon(item.productPrice)} / {item.quantity}개
                       </span>
-                      {item.addonName && (
+                      {formatOrderSizeOptionLabel(item) && (
+                        <span>{formatOrderSizeOptionLabel(item)}</span>
+                      )}
+                      {(item.addons ?? []).map((addon) => (
+                        <span key={addon.orderItemAddonId}>
+                          추가상품: {addon.addonName} (+{formatWon(addon.addonPrice)}) / {addon.quantity}개
+                        </span>
+                      ))}
+                      {(item.addons ?? []).length === 0 && item.addonName && (
                         <span>
-                          [추가상품: {item.addonName} {item.addonQuantity}개]
+                          추가상품: {item.addonName} (+{formatWon(item.addonPrice)}) / {item.addonQuantity}개
                         </span>
                       )}
-                      <span>상품구매금액 : {formatWon(item.itemTotalPrice)}</span>
                     </div>
-                    <em>{selectedOrder.statusDescription}</em>
                   </li>
                 ))}
               </ul>
@@ -3463,7 +3939,7 @@ function MyPage({
               <dl className="order-detail-table">
                 <div>
                   <dt>결제방법</dt>
-                  <dd>{selectedOrder.paymentMethod || "-"}</dd>
+                  <dd>{formatPaymentMethod(selectedOrder.paymentMethod)}</dd>
                 </div>
                 <div>
                   <dt>총 결제금액</dt>
@@ -3528,6 +4004,7 @@ function MyPage({
               <button
                 type="button"
                 disabled={
+                  selectedOrder.status === "PENDING" ||
                   selectedOrder.status === "CANCELED" ||
                   selectedOrder.status === "SHIPPED" ||
                   selectedOrder.status === "DELIVERED"
@@ -3543,35 +4020,62 @@ function MyPage({
 
       {cancelReasonOrderId !== null && (
         <div className="cart-notice-backdrop" role="presentation" onClick={closeCancelReasonModal}>
-          <section
+          <form
             className="cart-notice order-cancel-notice"
             role="dialog"
             aria-modal="true"
             aria-label="주문 취소 사유 입력"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCancelOrder(cancelReasonOrderId);
+            }}
             onClick={(event) => event.stopPropagation()}
           >
             <p>주문 취소 사유를 입력해주세요.</p>
-            <textarea
-              value={cancelReasons[cancelReasonOrderId] ?? ""}
-              placeholder="취소 사유"
-              onChange={(event) =>
-                setCancelReasons((prevReasons) => ({
+            <select
+              value={cancelReasonSelections[cancelReasonOrderId] ?? ""}
+              disabled={cancelOrderSubmitting}
+              onChange={(event) => {
+                setCancelReasonSelections((prevReasons) => ({
                   ...prevReasons,
                   [cancelReasonOrderId]: event.target.value,
-                }))
-              }
+                }));
+                setCancelReasonError("");
+              }}
               autoFocus
-            />
+            >
+              <option value="">취소 사유를 선택해주세요.</option>
+              {CUSTOMER_CANCEL_REASON_OPTIONS.map((reason) => (
+                <option key={reason} value={reason}>
+                  {reason}
+                </option>
+              ))}
+            </select>
+            {cancelReasonSelections[cancelReasonOrderId] === "기타" && (
+              <textarea
+                value={cancelCustomReasons[cancelReasonOrderId] ?? ""}
+                placeholder="취소 사유를 입력해주세요."
+                disabled={cancelOrderSubmitting}
+                onChange={(event) => {
+                  setCancelCustomReasons((prevReasons) => ({
+                    ...prevReasons,
+                    [cancelReasonOrderId]: event.target.value,
+                  }));
+                  setCancelReasonError("");
+                }}
+              />
+            )}
+            {cancelReasonError && <span className="order-cancel-error">{cancelReasonError}</span>}
             <small>취소 후에는 주문이 더 이상 진행되지 않습니다.</small>
             <div>
-              <button type="button" onClick={() => void handleCancelOrder(cancelReasonOrderId)}>
-                취소하기
+              <button type="submit" disabled={cancelOrderSubmitting}>
+                {cancelOrderSubmitting ? "취소 처리 중..." : "취소하기"}
               </button>
-              <button type="button" onClick={closeCancelReasonModal}>
+              <button type="button" onClick={closeCancelReasonModal} disabled={cancelOrderSubmitting}>
                 닫기
               </button>
             </div>
-          </section>
+          </form>
         </div>
       )}
 
@@ -4446,7 +4950,11 @@ function About() {
         </p>
       </div>
 
-      <div className="about-archive" aria-label="EARTHY 풍경 사진 아카이브">
+      <div
+        className="about-archive"
+        aria-label="EARTHY 풍경 사진 아카이브"
+        onContextMenu={preventProtectedImageAreaContextMenu}
+      >
         <div className="about-archive-window">
           <div className="about-archive-track photo-track">
             {archiveFlowImages.map((image, index) => (
@@ -4457,6 +4965,7 @@ function About() {
               >
                 <div className="about-archive-image-frame">
                   <img
+                    {...protectedImageProps()}
                     src={image.src}
                     alt={index >= ABOUT_ARCHIVE_IMAGES.length ? "" : `EARTHY 아카이브 사진 ${index + 1}`}
                   />
@@ -4479,9 +4988,14 @@ function BusinessFooter() {
   return (
     <footer className="business-footer">
       <p>
-        상호명: 얼씨 대표자: 한훈석 사업장주소: 경남 창원시 소답동 148-3, 711호 사업자등록번호: 877-05-02984
+        <span>COMPANY 얼씨</span>
+        <span>OWNER 한훈석</span>
+        <span>ADDRESS 경남 창원시 의창구 의안로66번길 45, 711호</span>
       </p>
-      <p>통신판매업신고번호: 제2026-경남창원-0000호 대표자 이메일: earthy9194@gmail.com</p>
+      <p>
+        <span>BUSINESS NO. 877-05-02984</span>
+        <span>E-MAIL earthy9194@gmail.com</span>
+      </p>
     </footer>
   );
 }

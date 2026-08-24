@@ -1,7 +1,6 @@
 import type { OrderResponse } from "./orders";
 
 const TOSS_SCRIPT_URL = "https://js.tosspayments.com/v1/payment";
-const DEFAULT_TOSS_CLIENT_KEY = "test_ck_6bJXmgo28eAnx9kpo1my8LAnGKWx";
 
 interface TossPaymentInstance {
   requestPayment: (
@@ -74,7 +73,11 @@ export async function requestTossPayment(order: OrderResponse) {
     throw new Error("Toss 결제창을 사용할 수 없습니다.");
   }
 
-  const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY ?? DEFAULT_TOSS_CLIENT_KEY;
+  const clientKey = import.meta.env.VITE_TOSS_CLIENT_KEY;
+  if (!clientKey) {
+    throw new Error("Toss 클라이언트 키가 설정되지 않았습니다.");
+  }
+
   const tossPayments = window.TossPayments(clientKey);
 
   sessionStorage.setItem(`earthyPaymentOrder:${order.orderNumber}`, String(order.orderId));

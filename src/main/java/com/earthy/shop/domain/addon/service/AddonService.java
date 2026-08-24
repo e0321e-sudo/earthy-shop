@@ -3,6 +3,7 @@ package com.earthy.shop.domain.addon.service;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
 import com.earthy.shop.common.response.PageResponseDto;
+import com.earthy.shop.domain.cart.repository.CartItemAddonRepository;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
 import com.earthy.shop.domain.addon.dto.request.AddonCreateRequestDto;
 import com.earthy.shop.domain.addon.dto.request.AddonUpdateRequestDto;
@@ -27,6 +28,7 @@ public class AddonService {
 
     private final AddonRepository addonRepository;
     private final CartItemRepository cartItemRepository;
+    private final CartItemAddonRepository cartItemAddonRepository;
 
     // 고객용 추가상품 목록 조회
     public List<AddonResponseDto> getAddons() {
@@ -98,7 +100,10 @@ public class AddonService {
     public void deleteAddon(Long addonId) {
         Addon addon = findAddon(addonId);
 
-        // 삭제 추가상품이 담긴 모든 장바구니 항목 정리
+        // 삭제 추가상품이 담긴 복수 추가상품 항목 정리
+        cartItemAddonRepository.deleteByAddon(addon);
+
+        // 기존 단일 추가상품이 담긴 모든 장바구니 항목 정리
         cartItemRepository.deleteByAddon(addon);
 
         // 추가상품 소프트 삭제

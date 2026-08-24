@@ -6,6 +6,7 @@ import com.earthy.shop.domain.product.dto.request.ProductCreateRequestDto;
 import com.earthy.shop.domain.product.dto.request.ProductUpdateRequestDto;
 import com.earthy.shop.domain.product.dto.response.AdminProductResponseDto;
 import com.earthy.shop.domain.product.service.ProductService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,7 +24,7 @@ public class AdminProductController {
     // 관리자용 상품 등록
     @PostMapping
     public ResponseEntity<ApiResponseDto<AdminProductResponseDto>> createProduct(
-            @RequestBody ProductCreateRequestDto requestDto
+            @Valid @RequestBody ProductCreateRequestDto requestDto
     ) {
         return ResponseEntity.ok(ApiResponseDto.success("상품 등록 성공", productService.createProduct(requestDto)));
     }
@@ -40,7 +41,7 @@ public class AdminProductController {
     @PatchMapping("/{productId}")
     public ResponseEntity<ApiResponseDto<AdminProductResponseDto>> updateProduct(
             @PathVariable Long productId,
-            @RequestBody ProductUpdateRequestDto requestDto
+            @Valid @RequestBody ProductUpdateRequestDto requestDto
     ) {
         return ResponseEntity.ok(ApiResponseDto.success("상품 수정 성공", productService.updateProduct(productId, requestDto)));
     }

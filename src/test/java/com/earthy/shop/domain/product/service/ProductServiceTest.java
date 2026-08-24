@@ -47,6 +47,9 @@ class ProductServiceTest {
     @Mock
     private CartItemRepository cartItemRepository;
 
+    @Mock
+    private ProductSizeOptionService productSizeOptionService;
+
     @InjectMocks
     private ProductService productService;
 
@@ -75,6 +78,7 @@ class ProductServiceTest {
 
         given(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(ProductCategory.POSTER, pageable))
                 .willReturn(new PageImpl<>(List.of(product), pageable, 1));
+        given(productSizeOptionService.getActiveOptions(product)).willReturn(List.of());
 
         // when
         PageResponseDto<ProductResponseDto> response = productService.getProducts(ProductCategory.POSTER, pageable);
@@ -93,6 +97,7 @@ class ProductServiceTest {
         given(productRepository.findByIdAndActiveTrueAndDeletedFalse(1L))
                 .willReturn(Optional.of(product));
         given(addonService.getAddons()).willReturn(List.of(addon));
+        given(productSizeOptionService.getActiveOptions(product)).willReturn(List.of());
 
         // when
         ProductDetailResponseDto response = productService.getProduct(1L);
@@ -145,7 +150,8 @@ class ProductServiceTest {
                 "/assets/products/sunset-sea.jpeg",
                 "/assets/products/detail.jpeg",
                 "노을이 담긴 엽서",
-                100
+                100,
+                null
         );
 
         given(productRepository.save(any(Product.class)))
@@ -154,6 +160,7 @@ class ProductServiceTest {
                     TestEntityUtils.setId(product, 1L);
                     return product;
                 });
+        given(productSizeOptionService.getOptions(any(Product.class))).willReturn(List.of());
 
         // when
         AdminProductResponseDto response = productService.createProduct(requestDto);
@@ -170,24 +177,26 @@ class ProductServiceTest {
         // given
         Product product = product("sunset sea postcard", ProductCategory.POSTCARD, 3500, 100);
         ProductUpdateRequestDto requestDto = new ProductUpdateRequestDto(
-                "forest poster",
-                ProductCategory.POSTER,
-                12000,
+                "forest postcard",
+                ProductCategory.POSTCARD,
+                3800,
                 "/assets/products/forest.jpeg",
                 "/assets/products/forest-detail.jpeg",
-                "숲 포스터",
-                30
+                "숲 엽서",
+                30,
+                null
         );
 
         given(productRepository.findById(1L)).willReturn(Optional.of(product));
+        given(productSizeOptionService.getOptions(product)).willReturn(List.of());
 
         // when
         AdminProductResponseDto response = productService.updateProduct(1L, requestDto);
 
         // then
-        assertThat(response.name()).isEqualTo("forest poster");
-        assertThat(response.category()).isEqualTo(ProductCategory.POSTER);
-        assertThat(response.price()).isEqualTo(12000);
+        assertThat(response.name()).isEqualTo("forest postcard");
+        assertThat(response.category()).isEqualTo(ProductCategory.POSTCARD);
+        assertThat(response.price()).isEqualTo(3800);
         assertThat(response.stockQuantity()).isEqualTo(30);
     }
 
@@ -274,6 +283,7 @@ class ProductServiceTest {
         Product product = product("sunset sea postcard", ProductCategory.POSTCARD, 3500, 5);
 
         given(productRepository.findById(1L)).willReturn(Optional.of(product));
+        given(productSizeOptionService.getOptions(product)).willReturn(List.of());
 
         // when
         AdminProductResponseDto response = productService.deactivateProduct(1L);
@@ -289,6 +299,7 @@ class ProductServiceTest {
         product.deactivate();
 
         given(productRepository.findById(1L)).willReturn(Optional.of(product));
+        given(productSizeOptionService.getOptions(product)).willReturn(List.of());
 
         // when
         AdminProductResponseDto response = productService.activateProduct(1L);

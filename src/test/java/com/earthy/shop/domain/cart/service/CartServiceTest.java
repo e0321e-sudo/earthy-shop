@@ -8,14 +8,19 @@ import com.earthy.shop.domain.addon.entity.Addon;
 import com.earthy.shop.domain.addon.enums.AddonType;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.dto.request.CartItemAddRequestDto;
+import com.earthy.shop.domain.cart.dto.request.CartItemAddonQuantityUpdateRequestDto;
 import com.earthy.shop.domain.cart.dto.request.CartItemQuantityUpdateRequestDto;
 import com.earthy.shop.domain.cart.dto.response.CartResponseDto;
 import com.earthy.shop.domain.cart.entity.CartItem;
+import com.earthy.shop.domain.cart.entity.CartItemAddon;
+import com.earthy.shop.domain.cart.repository.CartItemAddonRepository;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.member.service.MemberService;
 import com.earthy.shop.domain.product.entity.Product;
+import com.earthy.shop.domain.product.entity.ProductSizeOption;
 import com.earthy.shop.domain.product.enums.ProductCategory;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import com.earthy.shop.domain.product.service.ProductService;
 import com.earthy.shop.support.TestEntityUtils;
 import org.junit.jupiter.api.Test;
@@ -42,10 +47,16 @@ class CartServiceTest {
     private CartItemRepository cartItemRepository;
 
     @Mock
+    private CartItemAddonRepository cartItemAddonRepository;
+
+    @Mock
     private MemberService memberService;
 
     @Mock
     private ProductService productService;
+
+    @Mock
+    private ProductSizeOptionService productSizeOptionService;
 
     @Mock
     private AddonService addonService;
@@ -62,12 +73,12 @@ class CartServiceTest {
         Member member = member();
         Product product = product(10);
         CartItem savedCartItem = cartItem(member, product, null, 2, 0);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 2);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
-        given(cartItemRepository.findByMemberAndProductAndAddon(member, product, null))
-                .willReturn(Optional.empty());
+        given(cartItemRepository.findSameCartItems(member, product, null))
+                .willReturn(List.of());
         given(cartItemRepository.findByMember(member))
                 .willReturn(List.of())
                 .willReturn(List.of(savedCartItem));
@@ -87,7 +98,7 @@ class CartServiceTest {
     @Test
     void 장바구니_담기_멱등성_키가_없으면_예외가_발생한다() {
         // given
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 2);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -103,7 +114,7 @@ class CartServiceTest {
         Member member = member();
         Product product = product(10);
         CartItem cartItem = cartItem(member, product, null, 2, 0);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 2);
         IdempotencyKey completedKey = new IdempotencyKey(
                 "test@example.com",
                 "cart-idempotency-key",
@@ -132,7 +143,7 @@ class CartServiceTest {
     @Test
     void 처리중인_장바구니_담기_요청이면_중복_요청_예외가_발생한다() {
         // given
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 2);
         IdempotencyKey processingKey = new IdempotencyKey(
                 "test@example.com",
                 "cart-idempotency-key",
@@ -160,12 +171,12 @@ class CartServiceTest {
         Member member = member();
         Product product = product(10);
         CartItem cartItem = cartItem(member, product, null, 1, 0);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 2);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 2);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
-        given(cartItemRepository.findByMemberAndProductAndAddon(member, product, null))
-                .willReturn(Optional.of(cartItem));
+        given(cartItemRepository.findSameCartItems(member, product, null))
+                .willReturn(List.of(cartItem));
         given(cartItemRepository.findByMember(member))
                 .willReturn(List.of(cartItem))
                 .willReturn(List.of(cartItem));
@@ -184,12 +195,10 @@ class CartServiceTest {
         // given
         Member member = member();
         Product product = product(10);
-        Addon addon = addon(5);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, 1L, 0, 1);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, 1L, 0, 1);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
-        given(addonService.getActiveAddon(1L)).willReturn(addon);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -206,14 +215,15 @@ class CartServiceTest {
         Product product = product(10);
         Addon addon = addon(5);
         CartItem savedCartItem = cartItem(member, product, addon, 1, 2);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, 1L, 2, 1);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, 1L, 2, 1);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
         given(addonService.getActiveAddon(1L)).willReturn(addon);
-        given(cartItemRepository.findByMemberAndProductAndAddon(member, product, addon))
-                .willReturn(Optional.empty());
+        given(cartItemRepository.findSameCartItems(member, product, null))
+                .willReturn(List.of());
         given(cartItemRepository.findByMember(member))
+                .willReturn(List.of())
                 .willReturn(List.of())
                 .willReturn(List.of(savedCartItem));
         given(cartItemRepository.save(any(CartItem.class))).willReturn(savedCartItem);
@@ -225,26 +235,60 @@ class CartServiceTest {
         verify(productService).validateStock(1L, 1);
         verify(addonService).validateStock(1L, 2);
         assertThat(response.totalPrice()).isEqualTo(27500);
+        assertThat(response.items().getFirst().addons()).hasSize(1);
+        assertThat(response.items().getFirst().addons().getFirst().addonName()).isEqualTo("A3 원목 액자");
+        assertThat(response.items().getFirst().addons().getFirst().quantity()).isEqualTo(2);
     }
 
     @Test
-    void 같은_상품이지만_추가상품이_다르면_별도_항목으로_담는다() {
+    void 같은_상품이면_추가상품이_달라도_같은_항목에_추가상품을_누적한다() {
         // given
         Member member = member();
         Product product = product(10);
         Addon existingAddon = addon(5);
         Addon newAddon = new Addon("A2 원목 액자", AddonType.FRAME, 15000, 5);
         TestEntityUtils.setId(newAddon, 2L);
-        CartItem existingCartItem = cartItem(member, product, existingAddon, 1, 1);
-        CartItem savedCartItem = cartItem(member, product, newAddon, 1, 1);
-        TestEntityUtils.setId(savedCartItem, 2L);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, 2L, 1, 1);
+        CartItem existingCartItem = cartItem(member, product, null, 1, 0);
+        existingCartItem.addOrIncreaseAddon(existingAddon, 1);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, 2L, 1, 1);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
         given(addonService.getActiveAddon(2L)).willReturn(newAddon);
-        given(cartItemRepository.findByMemberAndProductAndAddon(member, product, newAddon))
-                .willReturn(Optional.empty());
+        given(cartItemRepository.findSameCartItems(member, product, null))
+                .willReturn(List.of(existingCartItem));
+        given(cartItemRepository.findByMember(member))
+                .willReturn(List.of(existingCartItem))
+                .willReturn(List.of(existingCartItem));
+
+        // when
+        CartResponseDto response = cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key");
+
+        // then
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+        assertThat(existingCartItem.getQuantity()).isEqualTo(2);
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().addons()).hasSize(2);
+    }
+
+    @Test
+    void 같은_포스터라도_사이즈가_다르면_별도_항목으로_담는다() {
+        // given
+        Member member = member();
+        Product product = posterProduct();
+        ProductSizeOption a2 = sizeOption(product, 1L, "A2", 3000, 10);
+        ProductSizeOption a3 = sizeOption(product, 2L, "A3", 0, 10);
+        CartItem existingCartItem = new CartItem(member, product, a2, null, 1, 0);
+        CartItem savedCartItem = new CartItem(member, product, a3, null, 1, 0);
+        TestEntityUtils.setId(existingCartItem, 1L);
+        TestEntityUtils.setId(savedCartItem, 2L);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, 2L, null, null, 1);
+
+        given(memberService.getActiveMember("test@example.com")).willReturn(member);
+        given(productService.getActiveProduct(1L)).willReturn(product);
+        given(productSizeOptionService.getActiveOption(product, 2L)).willReturn(a3);
+        given(cartItemRepository.findSameCartItems(member, product, a3))
+                .willReturn(List.of());
         given(cartItemRepository.findByMember(member))
                 .willReturn(List.of(existingCartItem))
                 .willReturn(List.of(existingCartItem, savedCartItem));
@@ -256,6 +300,49 @@ class CartServiceTest {
         // then
         verify(cartItemRepository).save(any(CartItem.class));
         assertThat(response.items()).hasSize(2);
+    }
+
+    @Test
+    void 포스터_동일_사이즈는_기존_장바구니_수량까지_합산해_재고를_검증한다() {
+        // given
+        Member member = member();
+        Product product = posterProduct();
+        ProductSizeOption a2 = sizeOption(product, 1L, "A2", 3000, 10);
+        CartItem cartItem = new CartItem(member, product, a2, null, 8, 0);
+        TestEntityUtils.setId(cartItem, 1L);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, 1L, null, null, 3);
+
+        given(memberService.getActiveMember("test@example.com")).willReturn(member);
+        given(productService.getActiveProduct(1L)).willReturn(product);
+        given(productSizeOptionService.getActiveOption(product, 1L)).willReturn(a2);
+        given(cartItemRepository.findSameCartItems(member, product, a2))
+                .willReturn(List.of(cartItem));
+        given(cartItemRepository.findByMember(member)).willReturn(List.of(cartItem));
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key"))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUT_OF_STOCK)
+                );
+    }
+
+    @Test
+    void 포스터_상품은_사이즈를_선택하지_않으면_장바구니에_담을_수_없다() {
+        // given
+        Member member = member();
+        Product product = posterProduct();
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 1);
+
+        given(memberService.getActiveMember("test@example.com")).willReturn(member);
+        given(productService.getActiveProduct(1L)).willReturn(product);
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> cartService.addCartItem("test@example.com", requestDto, "cart-idempotency-key"))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PRODUCT_SIZE_OPTION_REQUIRED)
+                );
     }
 
     @Test
@@ -287,21 +374,25 @@ class CartServiceTest {
         Member member = member();
         Product product = product(10);
         Addon addon = addon(10);
-        CartItem cartItem = cartItem(member, product, addon, 1, 1);
-        CartItemQuantityUpdateRequestDto requestDto = new CartItemQuantityUpdateRequestDto(1, 3);
+        CartItem cartItem = cartItem(member, product, null, 1, 0);
+        cartItem.addOrIncreaseAddon(addon, 1);
+        CartItemAddon cartItemAddon = cartItem.getCartItemAddons().getFirst();
+        TestEntityUtils.setId(cartItemAddon, 1L);
+        CartItemAddonQuantityUpdateRequestDto requestDto = new CartItemAddonQuantityUpdateRequestDto(3);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(cartItemRepository.findByIdAndMember(1L, member)).willReturn(Optional.of(cartItem));
+        given(cartItemAddonRepository.findByIdAndCartItem(1L, cartItem)).willReturn(Optional.of(cartItemAddon));
         given(cartItemRepository.findByMember(member))
                 .willReturn(List.of(cartItem))
                 .willReturn(List.of(cartItem));
 
         // when
-        CartResponseDto response = cartService.updateQuantity("test@example.com", 1L, requestDto);
+        CartResponseDto response = cartService.updateAddonQuantity("test@example.com", 1L, 1L, requestDto);
 
         // then
         verify(addonService).validateStock(1L, 3);
-        assertThat(cartItem.getAddonQuantity()).isEqualTo(3);
+        assertThat(cartItemAddon.getQuantity()).isEqualTo(3);
         assertThat(response.totalPrice()).isEqualTo(39500);
     }
 
@@ -364,12 +455,12 @@ class CartServiceTest {
         // given
         Member member = member();
         Product product = product(2);
-        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, 3);
+        CartItemAddRequestDto requestDto = new CartItemAddRequestDto(1L, null, null, null, 3);
 
         given(memberService.getActiveMember("test@example.com")).willReturn(member);
         given(productService.getActiveProduct(1L)).willReturn(product);
-        given(cartItemRepository.findByMemberAndProductAndAddon(member, product, null))
-                .willReturn(Optional.empty());
+        given(cartItemRepository.findSameCartItems(member, product, null))
+                .willReturn(List.of());
         given(cartItemRepository.findByMember(member)).willReturn(List.of());
         doThrow(new BusinessException(ErrorCode.OUT_OF_STOCK))
                 .when(productService)
@@ -418,6 +509,32 @@ class CartServiceTest {
         );
         TestEntityUtils.setId(product, 1L);
         return product;
+    }
+
+    private Product posterProduct() {
+        Product product = new Product(
+                "still green poster",
+                ProductCategory.POSTER,
+                17000,
+                "/assets/products/still-green.jpeg",
+                "/assets/products/details/still-green.jpeg",
+                "초록 풍경 포스터",
+                0
+        );
+        TestEntityUtils.setId(product, 1L);
+        return product;
+    }
+
+    private ProductSizeOption sizeOption(
+            Product product,
+            Long id,
+            String sizeName,
+            int additionalPrice,
+            int stockQuantity
+    ) {
+        ProductSizeOption option = new ProductSizeOption(product, sizeName, additionalPrice, stockQuantity, true);
+        TestEntityUtils.setId(option, id);
+        return option;
     }
 
     private Addon addon(int stockQuantity) {

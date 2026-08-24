@@ -6,6 +6,7 @@ import com.earthy.shop.common.idempotency.entity.IdempotencyKey;
 import com.earthy.shop.common.idempotency.service.IdempotencyService;
 import com.earthy.shop.common.response.PageResponseDto;
 import com.earthy.shop.domain.cart.dto.response.CartItemResponseDto;
+import com.earthy.shop.domain.cart.dto.response.CartItemAddonResponseDto;
 import com.earthy.shop.domain.cart.dto.response.CartResponseDto;
 import com.earthy.shop.domain.cart.service.CartService;
 import com.earthy.shop.domain.member.entity.Member;
@@ -17,9 +18,11 @@ import com.earthy.shop.domain.order.dto.request.OrderStatusUpdateRequestDto;
 import com.earthy.shop.domain.order.dto.response.OrderResponseDto;
 import com.earthy.shop.domain.order.entity.Order;
 import com.earthy.shop.domain.order.entity.OrderItem;
+import com.earthy.shop.domain.order.entity.OrderItemAddon;
 import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.order.repository.OrderRepository;
 import com.earthy.shop.domain.product.service.ProductService;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,6 +52,7 @@ public class OrderService {
     private final CartService cartService;
     private final DeliveryFeeCalculator deliveryFeeCalculator;
     private final ProductService productService;
+    private final ProductSizeOptionService productSizeOptionService;
     private final AddonService addonService;
     private final ApplicationEventPublisher eventPublisher;
     private final IdempotencyService idempotencyService;
@@ -77,7 +81,7 @@ public class OrderService {
         if (existingKey != null) {
             // 이미 처리 완료된 요청이면 기존 주문 결과 반환
             if (existingKey.isCompleted()) {
-                return getMyOrder(email, existingKey.getResourceId());
+                return OrderResponseDto.from(findMyOrder(email, existingKey.getResourceId()));
             }
 
             // 아직 처리 중이면 중복 요청 차단
@@ -175,12 +179,25 @@ public class OrderService {
                     cartItem.productName(),
                     cartItem.productImageUrl(),
                     cartItem.productPrice(),
+                    cartItem.sizeOptionId(),
+                    cartItem.sizeName(),
+                    cartItem.sizeAdditionalPrice(),
+                    cartItem.productUnitPrice(),
                     cartItem.addonId(),
                     cartItem.addonName(),
                     cartItem.addonPrice(),
                     cartItem.addonQuantity(),
                     cartItem.quantity()
             );
+
+            for (CartItemAddonResponseDto addon : cartItem.addons()) {
+                orderItem.addOrderItemAddon(new OrderItemAddon(
+                        addon.addonId(),
+                        addon.addonName(),
+                        addon.addonPrice(),
+                        addon.quantity()
+                ));
+            }
 
             order.addOrderItem(orderItem);
         }
@@ -229,18 +246,28 @@ public class OrderService {
     // 주문 상품 재고 검증
     private void validateOrderStock(List<CartItemResponseDto> orderItems) {
         Map<Long, Integer> productQuantities = new HashMap<>();
+        Map<Long, Integer> sizeOptionQuantities = new HashMap<>();
         Map<Long, Integer> addonQuantities = new HashMap<>();
 
         // 같은 상품과 추가상품이 여러 장바구니 항목에 나뉜 경우 합산
         for (CartItemResponseDto orderItem : orderItems) {
-            productQuantities.merge(orderItem.productId(), orderItem.quantity(), Integer::sum);
+            if (orderItem.sizeOptionId() == null) {
+                productQuantities.merge(orderItem.productId(), orderItem.quantity(), Integer::sum);
+            } else {
+                sizeOptionQuantities.merge(orderItem.sizeOptionId(), orderItem.quantity(), Integer::sum);
+            }
 
             if (orderItem.addonId() != null) {
                 addonQuantities.merge(orderItem.addonId(), orderItem.addonQuantity(), Integer::sum);
             }
+
+            for (CartItemAddonResponseDto addon : orderItem.addons()) {
+                addonQuantities.merge(addon.addonId(), addon.quantity(), Integer::sum);
+            }
         }
 
         productQuantities.forEach(productService::validateStock);
+        sizeOptionQuantities.forEach(productSizeOptionService::validateStock);
         addonQuantities.forEach(addonService::validateStock);
     }
 

@@ -2,7 +2,8 @@ import { request } from "./http";
 
 export interface PaymentConfirmRequest {
   orderId: number;
-  paymentKey: string;
+  paymentId: string;
+  paymentKey?: string;
   amount: number;
   method?: string;
 }

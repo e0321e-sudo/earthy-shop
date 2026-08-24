@@ -24,16 +24,18 @@ public class TossPaymentClient {
     private final String secretKey;
 
     public TossPaymentClient(
-            @Value("${toss.secret-key}") String secretKey
+            @Value("${toss.secret-key:}") String secretKey
     ) {
         this.restClient = RestClient.builder()
                 .baseUrl("https://api.tosspayments.com")
                 .build();
-        this.secretKey = secretKey;
+        this.secretKey = secretKey.trim();
     }
 
     // 결제 승인 요청
     public TossConfirmResponseDto confirmPayment(TossConfirmRequestDto requestDto) {
+        validateSecretKey(ErrorCode.PAYMENT_CONFIRM_FAILED);
+
         try {
             return restClient.post()
                     .uri("/v1/payments/confirm")
@@ -54,6 +56,8 @@ public class TossPaymentClient {
 
     // 결제 취소 요청
     public TossConfirmResponseDto cancelPayment(String paymentKey, TossCancelRequestDto requestDto) {
+        validateSecretKey(ErrorCode.PAYMENT_CANCEL_FAILED);
+
         try {
             return restClient.post()
                     .uri("/v1/payments/{paymentKey}/cancel", paymentKey)
@@ -79,5 +83,12 @@ public class TossPaymentClient {
                 .encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
 
         return "Basic " + encodedCredentials;
+    }
+
+    // Toss 키 설정 여부 검증
+    private void validateSecretKey(ErrorCode errorCode) {
+        if (secretKey.isBlank()) {
+            throw new BusinessException(errorCode);
+        }
     }
 }

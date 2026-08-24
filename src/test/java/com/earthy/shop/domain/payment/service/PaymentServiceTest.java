@@ -10,14 +10,15 @@ import com.earthy.shop.domain.notification.event.OrderCompletedNotificationEvent
 import com.earthy.shop.domain.order.entity.Order;
 import com.earthy.shop.domain.order.entity.OrderItem;
 import com.earthy.shop.domain.order.service.OrderService;
-import com.earthy.shop.domain.payment.client.TossPaymentClient;
+import com.earthy.shop.domain.payment.client.PortOnePaymentClient;
+import com.earthy.shop.domain.payment.dto.portone.PortOnePaymentResponseDto;
 import com.earthy.shop.domain.payment.dto.request.PaymentConfirmRequestDto;
 import com.earthy.shop.domain.payment.dto.response.PaymentResponseDto;
-import com.earthy.shop.domain.payment.dto.toss.TossConfirmResponseDto;
 import com.earthy.shop.domain.payment.entity.Payment;
 import com.earthy.shop.domain.payment.enums.PaymentStatus;
 import com.earthy.shop.domain.payment.repository.PaymentRepository;
 import com.earthy.shop.domain.product.service.ProductService;
+import com.earthy.shop.domain.product.service.ProductSizeOptionService;
 import com.earthy.shop.support.TestEntityUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,7 +54,10 @@ class PaymentServiceTest {
     private AddonService addonService;
 
     @Mock
-    private TossPaymentClient tossPaymentClient;
+    private ProductSizeOptionService productSizeOptionService;
+
+    @Mock
+    private PortOnePaymentClient portOnePaymentClient;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -68,19 +72,13 @@ class PaymentServiceTest {
     void 결제를_승인한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                "payment-key",
-                "ORD-20260728-ABC12345",
-                15500,
-                "카드",
-                "DONE"
-        );
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
+        PortOnePaymentResponseDto portOneResponse = portOneResponse("payment-key", "ORD-20260728-ABC12345", 15500, "CARD", "PAID");
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
-        given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
+        given(portOnePaymentClient.getPayment(any())).willReturn(portOneResponse);
         given(paymentRepository.save(any(Payment.class)))
                 .willAnswer(invocation -> {
                     Payment payment = invocation.getArgument(0);
@@ -108,7 +106,7 @@ class PaymentServiceTest {
         // given
         Order order = paidReadyOrder();
         Payment payment = payment(order, PaymentStatus.DONE);
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
         IdempotencyKey completedKey = new IdempotencyKey(
                 "test@example.com",
                 "payment-confirm-key",
@@ -129,14 +127,14 @@ class PaymentServiceTest {
 
         // then
         verify(orderService, never()).getOrderForUpdate(1L);
-        verify(tossPaymentClient, never()).confirmPayment(any());
+        verify(portOnePaymentClient, never()).getPayment(any());
         assertThat(response.status()).isEqualTo(PaymentStatus.DONE);
     }
 
     @Test
     void 처리중인_결제승인_요청이면_중복_요청_예외가_발생한다() {
         // given
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
         IdempotencyKey processingKey = new IdempotencyKey(
                 "test@example.com",
                 "payment-confirm-key",
@@ -156,13 +154,13 @@ class PaymentServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.IDEMPOTENCY_REQUEST_PROCESSING)
                 );
-        verify(tossPaymentClient, never()).confirmPayment(any());
+        verify(portOnePaymentClient, never()).getPayment(any());
     }
 
     @Test
     void 결제승인_멱등성_키가_없으면_예외가_발생한다() {
         // given
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -177,7 +175,7 @@ class PaymentServiceTest {
         // given
         Order order = paidReadyOrder();
         Payment payment = new Payment(order, "old-key", order.getOrderNumber(), 15500, "카드", PaymentStatus.DONE);
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
@@ -188,14 +186,14 @@ class PaymentServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_ALREADY_COMPLETED)
                 );
-        verify(tossPaymentClient, never()).confirmPayment(any());
+        verify(portOnePaymentClient, never()).getPayment(any());
     }
 
     @Test
     void 결제_금액이_주문_금액과_다르면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15000, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15000);
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
@@ -207,26 +205,20 @@ class PaymentServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_AMOUNT_MISMATCH)
                 );
-        verify(tossPaymentClient, never()).confirmPayment(any());
+        verify(portOnePaymentClient, never()).getPayment(any());
     }
 
     @Test
-    void 토스_승인_상태가_DONE이_아니면_예외가_발생한다() {
+    void 포트원_결제_상태가_PAID가_아니면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                "payment-key",
-                order.getOrderNumber(),
-                15500,
-                "카드",
-                "FAILED"
-        );
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
+        PortOnePaymentResponseDto portOneResponse = portOneResponse("payment-key", order.getOrderNumber(), 15500, "CARD", "FAILED");
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
-        given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
+        given(portOnePaymentClient.getPayment(any())).willReturn(portOneResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -240,7 +232,7 @@ class PaymentServiceTest {
     void 결제키가_중복되면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
@@ -252,26 +244,20 @@ class PaymentServiceTest {
                 .satisfies(exception ->
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_PAYMENT_KEY)
                 );
-        verify(tossPaymentClient, never()).confirmPayment(any());
+        verify(portOnePaymentClient, never()).getPayment(any());
     }
 
     @Test
-    void 토스_주문번호가_주문번호와_다르면_예외가_발생한다() {
+    void 포트원_주문번호가_주문번호와_다르면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                "payment-key",
-                "ORD-DIFFERENT",
-                15500,
-                "카드",
-                "DONE"
-        );
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
+        PortOnePaymentResponseDto portOneResponse = portOneResponse("payment-key", "ORD-DIFFERENT", 15500, "CARD", "PAID");
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
-        given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
+        given(portOnePaymentClient.getPayment(any())).willReturn(portOneResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -282,22 +268,16 @@ class PaymentServiceTest {
     }
 
     @Test
-    void 토스_승인_후_금액이_주문금액과_다르면_예외가_발생한다() {
+    void 포트원_결제_금액이_주문금액과_다르면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
-        PaymentConfirmRequestDto requestDto = new PaymentConfirmRequestDto(1L, "payment-key", 15500, "카드");
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                "payment-key",
-                order.getOrderNumber(),
-                15000,
-                "카드",
-                "DONE"
-        );
+        PaymentConfirmRequestDto requestDto = confirmRequest(15500);
+        PortOnePaymentResponseDto portOneResponse = portOneResponse("payment-key", order.getOrderNumber(), 15000, "CARD", "PAID");
 
         given(orderService.getOrderForUpdate(1L)).willReturn(order);
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.empty());
         given(paymentRepository.existsByPaymentKey("payment-key")).willReturn(false);
-        given(tossPaymentClient.confirmPayment(any())).willReturn(tossResponse);
+        given(portOnePaymentClient.getPayment(any())).willReturn(portOneResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -312,21 +292,69 @@ class PaymentServiceTest {
         // given
         Order order = paidReadyOrder();
         Payment payment = payment(order, PaymentStatus.DONE);
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                payment.getPaymentKey(),
-                order.getOrderNumber(),
-                15500,
-                "카드",
-                "CANCELED"
-        );
+        PortOnePaymentResponseDto portOneResponse = portOneResponse(payment.getPaymentKey(), order.getOrderNumber(), 15500, "CARD", "CANCELED");
 
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
-        given(tossPaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(tossResponse);
+        given(portOnePaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(portOneResponse);
 
         // when
         paymentService.cancelPayment(order, "고객 요청");
 
         // then
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+    }
+
+    @Test
+    void 포트원_취소응답의_cancellation_상태가_성공이면_결제를_취소한다() {
+        // given
+        Order order = paidReadyOrder();
+        Payment payment = payment(order, PaymentStatus.DONE);
+        PortOnePaymentResponseDto portOneResponse = portOneCancelResponse("SUCCEEDED");
+
+        given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
+        given(portOnePaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(portOneResponse);
+
+        // when
+        paymentService.cancelPayment(order, "고객 요청");
+
+        // then
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+    }
+
+    @Test
+    void 포트원_취소응답의_최상위_상태가_성공이면_결제를_취소한다() {
+        // given
+        Order order = paidReadyOrder();
+        Payment payment = payment(order, PaymentStatus.DONE);
+        PortOnePaymentResponseDto portOneResponse = portOneResponse(payment.getPaymentKey(), order.getOrderNumber(), 15500, "CARD", "SUCCEEDED");
+
+        given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
+        given(portOnePaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(portOneResponse);
+
+        // when
+        paymentService.cancelPayment(order, "고객 요청");
+
+        // then
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
+    }
+
+    @Test
+    void 포트원_취소응답이_애매해도_단건조회에서_취소상태면_결제를_취소한다() {
+        // given
+        Order order = paidReadyOrder();
+        Payment payment = payment(order, PaymentStatus.DONE);
+        PortOnePaymentResponseDto cancelResponse = portOneResponse(payment.getPaymentKey(), order.getOrderNumber(), 15500, "CARD", "PAID");
+        PortOnePaymentResponseDto verifiedResponse = portOneResponse(payment.getPaymentKey(), order.getOrderNumber(), 15500, "CARD", "CANCELED");
+
+        given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
+        given(portOnePaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(cancelResponse);
+        given(portOnePaymentClient.getPaymentForCancelVerification("payment-key")).willReturn(verifiedResponse);
+
+        // when
+        paymentService.cancelPayment(order, "고객 요청");
+
+        // then
+        verify(portOnePaymentClient).getPaymentForCancelVerification("payment-key");
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.CANCELED);
     }
 
@@ -346,20 +374,15 @@ class PaymentServiceTest {
     }
 
     @Test
-    void 토스_결제취소_상태가_CANCELED가_아니면_예외가_발생한다() {
+    void 포트원_결제취소_상태가_CANCELED가_아니면_예외가_발생한다() {
         // given
         Order order = paidReadyOrder();
         Payment payment = payment(order, PaymentStatus.DONE);
-        TossConfirmResponseDto tossResponse = new TossConfirmResponseDto(
-                payment.getPaymentKey(),
-                order.getOrderNumber(),
-                15500,
-                "카드",
-                "DONE"
-        );
+        PortOnePaymentResponseDto portOneResponse = portOneResponse(payment.getPaymentKey(), order.getOrderNumber(), 15500, "CARD", "PAID");
 
         given(paymentRepository.findByOrderAndStatus(order, PaymentStatus.DONE)).willReturn(Optional.of(payment));
-        given(tossPaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(tossResponse);
+        given(portOnePaymentClient.cancelPayment(eq("payment-key"), any())).willReturn(portOneResponse);
+        given(portOnePaymentClient.getPaymentForCancelVerification("payment-key")).willReturn(portOneResponse);
 
         // when & then
         assertThatExceptionOfType(BusinessException.class)
@@ -368,6 +391,46 @@ class PaymentServiceTest {
                         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_CANCEL_FAILED)
                 );
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.DONE);
+    }
+
+    private PaymentConfirmRequestDto confirmRequest(int amount) {
+        return new PaymentConfirmRequestDto(1L, "payment-key", null, amount, "카드");
+    }
+
+    private PortOnePaymentResponseDto portOneResponse(
+            String paymentId,
+            String orderName,
+            int amount,
+            String method,
+            String status
+    ) {
+        return new PortOnePaymentResponseDto(
+                paymentId,
+                paymentId,
+                null,
+                status,
+                orderName,
+                method,
+                new PortOnePaymentResponseDto.Amount(amount),
+                new PortOnePaymentResponseDto.Method(method, null),
+                null,
+                null
+        );
+    }
+
+    private PortOnePaymentResponseDto portOneCancelResponse(String cancellationStatus) {
+        return new PortOnePaymentResponseDto(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                new PortOnePaymentResponseDto.Cancellation(cancellationStatus)
+        );
     }
 
     private Order paidReadyOrder() {
