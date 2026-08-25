@@ -4977,7 +4977,6 @@ function About() {
                 <figcaption>
                   <span>{String((index % ABOUT_ARCHIVE_IMAGES.length) + 1).padStart(2, "0")} / EARTHY ARCHIVE</span>
                   <span>{image.date}</span>
-                  <span>{image.caption}</span>
                 </figcaption>
               </figure>
             ))}
