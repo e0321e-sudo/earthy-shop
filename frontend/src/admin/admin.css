@@ -658,6 +658,32 @@ button.admin-metric-card:hover {
   resize: vertical;
 }
 
+.admin-product-category-select {
+  box-sizing: border-box;
+  height: 42px;
+  min-height: 42px;
+  padding: 11px 36px 11px 12px;
+  border: 1px solid #d7d2c7;
+  border-radius: 0;
+  background-color: #fff;
+  color: #111;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #111 50%),
+    linear-gradient(135deg, #111 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 18px,
+    calc(100% - 13px) 18px;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+
 .admin-image-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px;
@@ -1510,13 +1536,25 @@ button.admin-metric-card:hover {
   }
 
   .admin-size-option-row {
-    grid-template-columns: 1fr;
-    padding: 12px;
-    border: 1px solid #d9d4ca;
+    grid-template-columns: minmax(78px, 1fr) minmax(72px, 0.8fr) minmax(64px, 0.75fr) 42px 48px;
+    gap: 6px;
+    align-items: end;
+  }
+
+  .admin-size-option-row label {
+    gap: 4px;
+    font-size: 12px;
   }
 
   .admin-size-option-active {
-    justify-items: start;
+    justify-items: center;
+  }
+
+  .admin-size-option-row > button {
+    width: auto;
+    min-height: 42px;
+    padding: 0 8px;
+    font-size: 12px;
   }
 
   .admin-dashboard-grid {
@@ -1834,5 +1872,35 @@ button.admin-metric-card:hover {
     right: 14px;
     left: 14px;
     min-width: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .admin-size-option-row {
+    grid-template-columns: minmax(0, 1fr) 74px 66px 42px 48px;
+    grid-template-areas:
+      "name price stock stock stock"
+      ". . . active remove";
+    gap: 8px 6px;
+  }
+
+  .admin-size-option-row label:nth-child(1) {
+    grid-area: name;
+  }
+
+  .admin-size-option-row label:nth-child(2) {
+    grid-area: price;
+  }
+
+  .admin-size-option-row label:nth-child(3) {
+    grid-area: stock;
+  }
+
+  .admin-size-option-active {
+    grid-area: active;
+  }
+
+  .admin-size-option-row > button {
+    grid-area: remove;
   }
 }

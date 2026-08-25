@@ -1684,7 +1684,11 @@ function ProductForm({
       </label>
       <label>
         카테고리
-        <select value={form.category} onChange={(event) => updateCategory(event.target.value as ProductCategory)}>
+        <select
+          className="admin-product-category-select"
+          value={form.category}
+          onChange={(event) => updateCategory(event.target.value as ProductCategory)}
+        >
           {PRODUCT_CATEGORIES.map((category) => (
             <option key={category.value} value={category.value}>
               {category.label}

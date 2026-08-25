@@ -67,6 +67,8 @@ button {
 .brand-button img {
   display: block;
   width: 100%;
+  height: auto;
+  image-rendering: auto;
 }
 
 .main-nav {
@@ -713,15 +715,25 @@ main {
 
 .addon-box select,
 .checkout-grid input,
-.checkout-grid select {
+.checkout-grid select,
+.checkout-grid textarea {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line);
   border-radius: 0;
   background: var(--paper);
+  color: var(--ink);
   padding: 0 12px;
   font-size: 14px;
   font-weight: 400;
+  -webkit-text-fill-color: var(--ink);
+}
+
+.checkout-grid input:focus,
+.checkout-grid select:focus,
+.checkout-grid textarea:focus {
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
 }
 
 .option-control {
@@ -930,11 +942,15 @@ main {
 }
 
 .checkout-delivery-memo-select.is-placeholder {
+  color: var(--muted);
   font-weight: 300 !important;
+  -webkit-text-fill-color: var(--muted);
 }
 
 .checkout-delivery-memo-select option {
+  color: var(--ink);
   font-weight: 300;
+  -webkit-text-fill-color: var(--ink);
 }
 
 .checkout-phone-row {
@@ -951,6 +967,7 @@ main {
 .checkout-phone-row select,
 .checkout-delivery-memo-select {
   appearance: none;
+  -webkit-appearance: none;
   padding-right: 34px;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
     linear-gradient(135deg, var(--muted) 50%, transparent 50%);
