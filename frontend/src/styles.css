@@ -3282,12 +3282,13 @@ main {
 
   .menu-button {
     top: 34px;
-    left: 18px;
+    left: 14px;
   }
 
   .header-actions {
     top: 42px;
-    right: 18px;
+    right: 14px;
+    gap: 5px;
   }
 
   .main-nav {

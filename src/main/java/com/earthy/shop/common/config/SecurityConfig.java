@@ -85,7 +85,9 @@ public class SecurityConfig {
                 "http://localhost:5175",
                 "http://127.0.0.1:5173",
                 "http://127.0.0.1:5174",
-                "http://127.0.0.1:5175"
+                "http://127.0.0.1:5175",
+                "https://earthy-shop.com",
+                "https://www.earthy-shop.com"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
