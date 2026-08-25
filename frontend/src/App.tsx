@@ -1493,7 +1493,7 @@ function Header({
               </button>
             ))}
           <button className={page === "about" ? "is-active" : ""} type="button" onClick={handleAbout}>
-            ABOUT US
+            ABOUT
           </button>
           {categoryTabs
             .filter((tab) => tab.value === "POSTCARD" || tab.value === "POSTER")
@@ -2402,7 +2402,7 @@ function ProductDetail({
       quantity,
   });
 
-  const selectAddon = (addonId: number) => {
+  const selectAddon = (addonId: number, groupName: string) => {
     setSelectedAddons((prevAddons) => {
       if (prevAddons[addonId]) {
         return prevAddons;
@@ -2413,6 +2413,10 @@ function ProductDetail({
         [addonId]: 1,
       };
     });
+    setOpenAddonGroups((prevGroups) => ({
+      ...prevGroups,
+      [groupName]: false,
+    }));
   };
 
   const removeSelectedAddon = (addonId: number) => {
@@ -2574,7 +2578,7 @@ function ProductDetail({
                                   className="addon-option-button"
                                   type="button"
                                   disabled={addon.soldOut}
-                                  onClick={() => selectAddon(addon.id)}
+                                  onClick={() => selectAddon(addon.id, groupName)}
                                 >
                                   <span>{formatAddonOptionLabel(addon)}</span>
                                   {addon.soldOut && <small>SOLD OUT</small>}
@@ -4987,14 +4991,41 @@ function About() {
 function BusinessFooter() {
   return (
     <footer className="business-footer">
+      <div className="business-footer-links" aria-label="소셜 및 문의 링크">
+        <a
+          href="https://www.instagram.com/earthy_official_?igsi=MWVocndobmN0ajQxMA=="
+          target="_blank"
+          rel="noreferrer"
+          aria-label="EARTHY 인스타그램 새 탭으로 열기"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="4" width="16" height="16" rx="5" />
+            <circle cx="12" cy="12" r="3.4" />
+            <circle cx="16.5" cy="7.5" r="0.8" />
+          </svg>
+        </a>
+        <a href="mailto:earthy9194@gmail.com" aria-label="EARTHY 이메일 보내기">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="6" width="16" height="12" rx="1.5" />
+            <path d="m5 7 7 6 7-6" />
+          </svg>
+        </a>
+      </div>
       <p>
-        <span>COMPANY 얼씨</span>
-        <span>OWNER 한훈석</span>
-        <span>ADDRESS 경남 창원시 의창구 의안로66번길 45, 711호</span>
+        <span>
+          <span className="business-footer-label">COMPANY</span> EARTHY STUDIO
+        </span>
+        <span>
+          <span className="business-footer-label">ADDRESS</span> 부산광역시 남구 수영로 312, 21센츄리오피스텔 611호
+        </span>
       </p>
       <p>
-        <span>BUSINESS NO. 877-05-02984</span>
-        <span>E-MAIL earthy9194@gmail.com</span>
+        <span>
+          <span className="business-footer-label">BUSINESS NO.</span> 877-05-02984
+        </span>
+        <span>
+          <span className="business-footer-label">E-MAIL</span> earthy9194@gmail.com
+        </span>
       </p>
     </footer>
   );

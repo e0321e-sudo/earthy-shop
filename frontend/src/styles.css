@@ -2511,6 +2511,37 @@ main {
   text-align: center;
 }
 
+.business-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 8px;
+}
+
+.business-footer-links a {
+  display: grid;
+  place-items: center;
+  width: clamp(24px, 2.1vw, 32px);
+  height: clamp(24px, 2.1vw, 32px);
+  color: var(--ink);
+  transition: color 160ms ease;
+}
+
+.business-footer-links a:hover {
+  color: var(--moss);
+}
+
+.business-footer-links svg {
+  display: block;
+  width: clamp(24px, 1.9vw, 30px);
+  height: clamp(24px, 1.9vw, 30px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .business-footer p {
   display: flex;
   flex-wrap: wrap;
@@ -2521,6 +2552,10 @@ main {
 
 .business-footer p + p {
   margin-top: 2px;
+}
+
+.business-footer-label {
+  font-weight: 700;
 }
 
 .board-view {
