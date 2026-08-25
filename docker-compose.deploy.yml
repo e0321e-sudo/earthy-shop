@@ -1,0 +1,4 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required for production deploy}
+    pull_policy: always
