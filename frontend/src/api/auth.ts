@@ -50,6 +50,13 @@ export interface EmailFindResponse {
   email: string;
   provider: "LOCAL" | "KAKAO" | "NAVER";
   providerDescription: string;
+  accounts?: EmailFindAccount[];
+}
+
+export interface EmailFindAccount {
+  email: string;
+  provider: "LOCAL" | "KAKAO" | "NAVER";
+  providerDescription: string;
 }
 
 export function signup(requestBody: SignupRequest): Promise<MemberResponse> {

@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
@@ -18,8 +19,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // 활성 회원 이메일 기준 단건 조회
     Optional<Member> findByEmailAndActiveTrue(String email);
 
-    // 이름과 연락처 기준 활성 회원 조회
-    Optional<Member> findByNameAndPhoneAndActiveTrue(String name, String phone);
+    // 이름과 연락처 기준 활성 회원 목록 조회
+    List<Member> findAllByNameAndPhoneAndActiveTrue(String name, String phone);
 
     // 관리자 회원 목록 조회
     @Query("""

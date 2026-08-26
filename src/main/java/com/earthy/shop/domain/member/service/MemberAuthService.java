@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.List;
 
 // 회원 인증 서비스
 @Service
@@ -43,13 +44,17 @@ public class MemberAuthService {
 
     // 이메일 찾기
     public MemberEmailFindResponseDto findEmail(MemberEmailFindRequestDto requestDto) {
-        // 이름과 연락처 기준 회원 조회
-        Member member = memberRepository.findByNameAndPhoneAndActiveTrue(
+        // 이름과 연락처 기준 활성 회원 목록 조회
+        List<Member> members = memberRepository.findAllByNameAndPhoneAndActiveTrue(
                 requestDto.getName(),
                 requestDto.getPhone()
-        ).orElseThrow(() -> new BusinessException(ErrorCode.MEMBER_EMAIL_NOT_FOUND));
+        );
 
-        return MemberEmailFindResponseDto.from(member);
+        if (members.isEmpty()) {
+            throw new BusinessException(ErrorCode.MEMBER_EMAIL_NOT_FOUND);
+        }
+
+        return MemberEmailFindResponseDto.from(members);
     }
 
     // 비밀번호 찾기

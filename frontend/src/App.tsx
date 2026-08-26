@@ -8,6 +8,7 @@ import {
   signup,
   type LoginRequest,
   type LoginResponse,
+  type EmailFindAccount,
   type MemberResponse,
   type SignupRequest,
 } from "./api/auth";
@@ -4325,6 +4326,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [emailFindResults, setEmailFindResults] = useState<EmailFindAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [serviceTermsOpen, setServiceTermsOpen] = useState(false);
   const [privacyTermsOpen, setPrivacyTermsOpen] = useState(false);
@@ -4385,6 +4387,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const moveAuthMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setMessage(null);
+    setEmailFindResults([]);
     setError(null);
   };
 
@@ -4407,6 +4410,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     event.preventDefault();
     setSubmitting(true);
     setMessage(null);
+    setEmailFindResults([]);
     setError(null);
 
     try {
@@ -4493,6 +4497,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     event.preventDefault();
     setSubmitting(true);
     setMessage(null);
+    setEmailFindResults([]);
     setError(null);
 
     try {
@@ -4507,7 +4512,17 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
       }
 
       const response = await findEmail(emailFindForm);
-      setMessage(`${response.email} (${response.providerDescription})`);
+      setEmailFindResults(
+        response.accounts && response.accounts.length > 0
+          ? response.accounts
+          : [
+              {
+                email: response.email,
+                provider: response.provider,
+                providerDescription: response.providerDescription,
+              },
+            ]
+      );
     } catch (submitError) {
       const errorMessage = submitError instanceof Error ? submitError.message : "요청 실패";
       setError(errorMessage);
@@ -4520,6 +4535,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     event.preventDefault();
     setSubmitting(true);
     setMessage(null);
+    setEmailFindResults([]);
     setError(null);
 
     try {
@@ -4549,6 +4565,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setCompletedMemberName("");
     setMode("login");
     setMessage(null);
+    setEmailFindResults([]);
     setError(null);
   };
 
@@ -4612,11 +4629,18 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
           </button>
         </div>
 
-        {message && (
+        {emailFindResults.length > 0 && (
           <div className="email-find-modal-backdrop" role="presentation">
             <section className="email-find-modal" role="dialog" aria-modal="true">
               <p>가입된 이메일</p>
-              <strong>{message}</strong>
+              <ul className="email-find-result-list">
+                {emailFindResults.map((account) => (
+                  <li key={`${account.provider}-${account.email}`}>
+                    <strong>{account.email}</strong>
+                    <span>{account.providerDescription}</span>
+                  </li>
+                ))}
+              </ul>
               <div>
                 <button type="button" onClick={moveToLogin}>
                   확인

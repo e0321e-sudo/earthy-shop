@@ -2033,6 +2033,25 @@ main {
   white-space: pre-line;
 }
 
+.email-find-result-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.email-find-result-list li {
+  display: grid;
+  gap: 3px;
+}
+
+.email-find-result-list span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .email-find-modal div {
   display: grid;
   justify-content: center;

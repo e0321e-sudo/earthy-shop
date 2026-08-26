@@ -1,17 +1,21 @@
 package com.earthy.shop.domain.member.service;
 
 import com.earthy.shop.common.config.JwtUtil;
+import com.earthy.shop.common.enums.LoginProvider;
 import com.earthy.shop.common.enums.UserRole;
 import com.earthy.shop.common.exception.BusinessException;
 import com.earthy.shop.common.exception.ErrorCode;
+import com.earthy.shop.domain.member.dto.request.MemberEmailFindRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLoginRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberLogoutRequestDto;
 import com.earthy.shop.domain.member.dto.request.MemberTokenRefreshRequestDto;
+import com.earthy.shop.domain.member.dto.response.MemberEmailFindResponseDto;
 import com.earthy.shop.domain.member.dto.response.MemberLoginResponseDto;
 import com.earthy.shop.domain.member.entity.Member;
 import com.earthy.shop.domain.member.entity.RefreshToken;
 import com.earthy.shop.domain.member.repository.MemberRepository;
 import com.earthy.shop.domain.member.repository.RefreshTokenRepository;
+import com.earthy.shop.domain.notification.service.EmailService;
 import com.earthy.shop.support.TestEntityUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,8 +48,70 @@ class MemberAuthServiceTest {
     @Mock
     private JwtUtil jwtUtil;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private MemberAuthService memberAuthService;
+
+    @Test
+    void 이메일_찾기_시_같은_이름과_연락처의_여러_계정을_반환한다() {
+        // given
+        Member localMember = member("test1@naver.com", LoginProvider.LOCAL, null);
+        Member kakaoMember = member("kakao_5001@earthy.local", LoginProvider.KAKAO, "5001");
+        Member naverMember = member("naver_7001@earthy.local", LoginProvider.NAVER, "7001");
+        MemberEmailFindRequestDto requestDto = new MemberEmailFindRequestDto("박수지", "010-1234-5678");
+
+        given(memberRepository.findAllByNameAndPhoneAndActiveTrue("박수지", "010-1234-5678"))
+                .willReturn(List.of(localMember, kakaoMember, naverMember));
+
+        // when
+        MemberEmailFindResponseDto response = memberAuthService.findEmail(requestDto);
+
+        // then
+        assertThat(response.accounts()).hasSize(3);
+        assertThat(response.accounts())
+                .extracting(MemberEmailFindResponseDto.Account::email)
+                .containsExactly("test1@naver.com", "kakao_5001@earthy.local", "naver_7001@earthy.local");
+        assertThat(response.accounts())
+                .extracting(MemberEmailFindResponseDto.Account::providerDescription)
+                .containsExactly("일반 로그인", "카카오 로그인", "네이버 로그인");
+    }
+
+    @Test
+    void 이메일_찾기_시_단건이면_기존_응답과_계정목록을_함께_반환한다() {
+        // given
+        Member member = member("test1@naver.com", LoginProvider.LOCAL, null);
+        MemberEmailFindRequestDto requestDto = new MemberEmailFindRequestDto("박수지", "010-1234-5678");
+
+        given(memberRepository.findAllByNameAndPhoneAndActiveTrue("박수지", "010-1234-5678"))
+                .willReturn(List.of(member));
+
+        // when
+        MemberEmailFindResponseDto response = memberAuthService.findEmail(requestDto);
+
+        // then
+        assertThat(response.email()).isEqualTo("test1@naver.com");
+        assertThat(response.provider()).isEqualTo(LoginProvider.LOCAL);
+        assertThat(response.providerDescription()).isEqualTo("일반 로그인");
+        assertThat(response.accounts()).hasSize(1);
+    }
+
+    @Test
+    void 이메일_찾기_시_가입정보가_없으면_예외가_발생한다() {
+        // given
+        MemberEmailFindRequestDto requestDto = new MemberEmailFindRequestDto("박수지", "010-1234-5678");
+
+        given(memberRepository.findAllByNameAndPhoneAndActiveTrue("박수지", "010-1234-5678"))
+                .willReturn(List.of());
+
+        // when & then
+        assertThatExceptionOfType(BusinessException.class)
+                .isThrownBy(() -> memberAuthService.findEmail(requestDto))
+                .satisfies(exception ->
+                        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.MEMBER_EMAIL_NOT_FOUND)
+                );
+    }
 
     @Test
     void 회원_로그인_시_토큰을_발급하고_리프레시토큰을_저장한다() {
@@ -208,13 +275,19 @@ class MemberAuthServiceTest {
     }
 
     private Member member() {
+        return member("user@example.com", LoginProvider.LOCAL, null);
+    }
+
+    private Member member(String email, LoginProvider provider, String providerId) {
         Member member = new Member(
-                "user@example.com",
+                email,
                 "encoded-password",
                 "박수지",
                 "010-1234-5678"
         );
         TestEntityUtils.setId(member, 1L);
+        TestEntityUtils.setField(member, "provider", provider);
+        TestEntityUtils.setField(member, "providerId", providerId);
         return member;
     }
 }
