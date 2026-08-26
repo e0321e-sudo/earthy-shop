@@ -153,7 +153,7 @@ class ControllerIntegrationTest {
     @DisplayName("고객 상품 목록 조회 API")
     void getProducts() throws Exception {
         // given
-        given(productService.getProducts(eq(ProductCategory.POSTCARD), any(Pageable.class)))
+        given(productService.getProducts(eq(ProductCategory.POSTCARD), eq("latest"), any(Pageable.class)))
                 .willReturn(PageResponseDto.from(Page.empty(PageRequest.of(0, 20))));
 
         // when & then
@@ -165,7 +165,7 @@ class ControllerIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("요청 성공"));
 
-        verify(productService).getProducts(eq(ProductCategory.POSTCARD), any(Pageable.class));
+        verify(productService).getProducts(eq(ProductCategory.POSTCARD), eq("latest"), any(Pageable.class));
     }
 
     @Test

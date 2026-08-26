@@ -1,5 +1,6 @@
 export type ProductCategory = "ALL" | "POSTCARD" | "POSTER" | "ETC";
 export type AddonType = "FRAME" | "PREMIUM_FRAME" | "BASIC_FRAME";
+export type ProductSort = "latest" | "priceAsc" | "priceDesc" | "popular";
 
 export interface Addon {
   id: number;
@@ -43,4 +44,11 @@ export const categoryTabs: CategoryTab[] = [
   { label: "엽서", value: "POSTCARD" },
   { label: "포스터", value: "POSTER" },
   { label: "ETC", value: "ETC" },
+];
+
+export const productSortOptions: Array<{ label: string; value: ProductSort }> = [
+  { label: "신상품순", value: "latest" },
+  { label: "낮은 가격순", value: "priceAsc" },
+  { label: "높은 가격순", value: "priceDesc" },
+  { label: "인기순", value: "popular" },
 ];

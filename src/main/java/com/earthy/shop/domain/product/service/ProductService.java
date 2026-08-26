@@ -7,6 +7,7 @@ import com.earthy.shop.common.storage.service.S3ImageService;
 import com.earthy.shop.domain.addon.dto.response.AddonResponseDto;
 import com.earthy.shop.domain.addon.service.AddonService;
 import com.earthy.shop.domain.cart.repository.CartItemRepository;
+import com.earthy.shop.domain.order.enums.OrderStatus;
 import com.earthy.shop.domain.product.dto.request.ProductCreateRequestDto;
 import com.earthy.shop.domain.product.dto.request.ProductUpdateRequestDto;
 import com.earthy.shop.domain.product.dto.response.AdminProductResponseDto;
@@ -14,10 +15,12 @@ import com.earthy.shop.domain.product.dto.response.ProductDetailResponseDto;
 import com.earthy.shop.domain.product.dto.response.ProductResponseDto;
 import com.earthy.shop.domain.product.entity.Product;
 import com.earthy.shop.domain.product.enums.ProductCategory;
+import com.earthy.shop.domain.product.enums.ProductSortType;
 import com.earthy.shop.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +36,13 @@ import java.util.Objects;
 @Transactional(readOnly = true)
 public class ProductService {
 
+    private static final List<OrderStatus> SALES_COUNT_STATUSES = List.of(
+            OrderStatus.PAID,
+            OrderStatus.PREPARING,
+            OrderStatus.SHIPPED,
+            OrderStatus.DELIVERED
+    );
+
     private final ProductRepository productRepository;
     private final AddonService addonService;
     private final CartItemRepository cartItemRepository;
@@ -40,15 +50,32 @@ public class ProductService {
     private final S3ImageService s3ImageService;
 
     // 고객용 상품 목록 조회
-    public PageResponseDto<ProductResponseDto> getProducts(ProductCategory category, Pageable pageable){
+    public PageResponseDto<ProductResponseDto> getProducts(ProductCategory category, String sort, Pageable pageable) {
+        ProductSortType sortType = ProductSortType.from(sort);
+
+        if (sortType == ProductSortType.POPULAR) {
+            return PageResponseDto.from(productRepository.findPopularProducts(
+                            category,
+                            SALES_COUNT_STATUSES,
+                            PageRequest.of(pageable.getPageNumber(), pageable.getPageSize())
+                    )
+                    .map(this::toProductResponse));
+        }
+
+        Pageable sortedPageable = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                sortType.getSort()
+        );
+
         // 전체상품조회 선택 시 전체 활성 상품 조회
         if (category == null) {
-            return PageResponseDto.from(productRepository.findByActiveTrueAndDeletedFalse(pageable)
+            return PageResponseDto.from(productRepository.findByActiveTrueAndDeletedFalse(sortedPageable)
                     .map(this::toProductResponse));
         }
 
         // 카테고리 선택 시 해당 카테고리 활성 상품 조회
-        return PageResponseDto.from(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(category, pageable)
+        return PageResponseDto.from(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(category, sortedPageable)
                 .map(this::toProductResponse));
     }
 

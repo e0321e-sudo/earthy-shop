@@ -1,5 +1,5 @@
 import { request } from "./http";
-import type { Product, ProductCategory } from "../data/products";
+import type { Product, ProductCategory, ProductSort } from "../data/products";
 
 export interface PageResponse<T> {
   content: T[];
@@ -12,15 +12,27 @@ export interface PageResponse<T> {
 }
 
 export function getProducts(category: ProductCategory): Promise<Product[]> {
-  return getProductsPage(category).then((page) => page.content);
+    return getProductsPage(category).then((page) => page.content);
 }
 
-export function getProductsPage(category: ProductCategory, page = 0, size = 20): Promise<PageResponse<Product>> {
+export function getProductsPage(
+  category: ProductCategory,
+  page = 0,
+  size = 20,
+  sort: ProductSort = "latest"
+): Promise<PageResponse<Product>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+    sort,
+  });
+
   if (category === "ALL") {
-    return request<PageResponse<Product>>(`/api/products?page=${page}&size=${size}`);
+    return request<PageResponse<Product>>(`/api/products?${params.toString()}`);
   }
 
-  return request<PageResponse<Product>>(`/api/products?category=${category}&page=${page}&size=${size}`);
+  params.set("category", category);
+  return request<PageResponse<Product>>(`/api/products?${params.toString()}`);
 }
 
 export function searchProductsPage(keyword: string, page = 0, size = 20): Promise<PageResponse<Product>> {

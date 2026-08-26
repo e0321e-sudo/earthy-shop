@@ -61,9 +61,11 @@ import privacyCollectionText from "./terms/privacy-collection.txt?raw";
 import serviceTermsText from "./terms/service-terms.txt?raw";
 import {
   categoryTabs,
+  productSortOptions,
   type Addon,
   type Product,
   type ProductCategory,
+  type ProductSort,
   type ProductSizeOption,
 } from "./data/products";
 
@@ -171,6 +173,7 @@ type CustomerRoute = {
   category?: ProductCategory;
   productId?: number;
   productPage?: number;
+  productSort?: ProductSort;
 };
 
 const CATEGORY_ROUTE_SEGMENTS: Record<ProductCategory, string> = {
@@ -186,6 +189,8 @@ const ROUTE_SEGMENT_CATEGORIES: Record<string, ProductCategory> = {
   etc: "ETC",
 };
 
+const PRODUCT_SORT_VALUES = productSortOptions.map((option) => option.value);
+
 function readPageParam(search: string) {
   const pageParam = new URLSearchParams(search).get("page");
   const parsedPage = pageParam === null ? 0 : Number(pageParam);
@@ -193,11 +198,22 @@ function readPageParam(search: string) {
   return Number.isInteger(parsedPage) && parsedPage >= 0 ? parsedPage : 0;
 }
 
+function readProductSortParam(search: string): ProductSort {
+  const sortParam = new URLSearchParams(search).get("sort");
+
+  return PRODUCT_SORT_VALUES.includes(sortParam as ProductSort) ? (sortParam as ProductSort) : "latest";
+}
+
 function readCustomerRouteFromLocation(): CustomerRoute {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
 
   if (path === "/products") {
-    return { page: "shop", category: "ALL", productPage: readPageParam(window.location.search) };
+    return {
+      page: "shop",
+      category: "ALL",
+      productPage: readPageParam(window.location.search),
+      productSort: readProductSortParam(window.location.search),
+    };
   }
 
   const productPathMatch = path.match(/^\/products\/([^/]+)$/);
@@ -207,7 +223,12 @@ function readCustomerRouteFromLocation(): CustomerRoute {
     const categoryFromSegment = ROUTE_SEGMENT_CATEGORIES[segment];
 
     if (categoryFromSegment) {
-      return { page: "shop", category: categoryFromSegment, productPage: readPageParam(window.location.search) };
+      return {
+        page: "shop",
+        category: categoryFromSegment,
+        productPage: readPageParam(window.location.search),
+        productSort: readProductSortParam(window.location.search),
+      };
     }
 
     const productId = Number(segment);
@@ -259,11 +280,16 @@ function readCustomerRouteFromLocation(): CustomerRoute {
 function createCustomerRouteUrl(route: CustomerRoute) {
   if (route.page === "shop") {
     const category = route.category ?? "ALL";
+    const productSort = route.productSort ?? "latest";
     const segment = CATEGORY_ROUTE_SEGMENTS[category];
     const path = segment ? `/products/${segment}` : "/products";
-    const pageQuery = route.productPage && route.productPage > 0 ? `?page=${route.productPage}` : "";
+    const params = new URLSearchParams({ sort: productSort });
 
-    return `${path}${pageQuery}`;
+    if (route.productPage && route.productPage > 0) {
+      params.set("page", String(route.productPage));
+    }
+
+    return `${path}?${params.toString()}`;
   }
 
   if (route.page === "detail" && route.productId) {
@@ -329,11 +355,13 @@ interface ShopProps {
   category: ProductCategory;
   products: Product[];
   pageInfo: ProductPageResponse<Product>;
+  sort: ProductSort;
   loading: boolean;
   loaded: boolean;
   error: string | null;
   onOpenDetail: (productId: number) => void;
   onChangePage: (page: number) => void;
+  onChangeSort: (sort: ProductSort) => void;
 }
 
 interface SearchPageProps {
@@ -719,6 +747,7 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productPageInfo, setProductPageInfo] = useState<ProductPageResponse<Product>>(() => createEmptyPage<Product>());
   const [productPage, setProductPage] = useState(initialRoute.productPage ?? 0);
+  const [productSort, setProductSort] = useState<ProductSort>(initialRoute.productSort ?? "latest");
   const [productLoading, setProductLoading] = useState(initialRoute.page === "shop");
   const [productLoaded, setProductLoaded] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
@@ -759,6 +788,7 @@ function App() {
     if (route.page === "shop") {
       setCategory(route.category ?? "ALL");
       setProductPage(route.productPage ?? 0);
+      setProductSort(route.productSort ?? "latest");
       setProducts([]);
       setProductPageInfo(createEmptyPage<Product>());
       setProductLoading(true);
@@ -871,7 +901,7 @@ function App() {
       setProductPageInfo(createEmptyPage<Product>());
 
       try {
-        const data = await getProductsPage(category, productPage);
+        const data = await getProductsPage(category, productPage, 20, productSort);
 
         if (!ignore) {
           setProducts(data.content);
@@ -899,7 +929,7 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [category, page, productPage]);
+  }, [category, page, productPage, productSort]);
 
   // 상품 상세 조회
   useEffect(() => {
@@ -1250,7 +1280,7 @@ function App() {
 
   // 카테고리 이동
   const openCategory = (nextCategory: ProductCategory) => {
-    navigateCustomerRoute({ page: "shop", category: nextCategory, productPage: 0 });
+    navigateCustomerRoute({ page: "shop", category: nextCategory, productPage: 0, productSort });
   };
 
   // 상품 상세 이동
@@ -1277,7 +1307,12 @@ function App() {
 
   // 상품 목록 페이지 이동
   const changeProductPage = (nextProductPage: number) => {
-    navigateCustomerRoute({ page: "shop", category, productPage: nextProductPage });
+    navigateCustomerRoute({ page: "shop", category, productPage: nextProductPage, productSort });
+  };
+
+  // 상품 목록 정렬 변경
+  const changeProductSort = (nextProductSort: ProductSort) => {
+    navigateCustomerRoute({ page: "shop", category, productPage: 0, productSort: nextProductSort });
   };
 
   // 로그인 필요 화면 진입 검증
@@ -1466,11 +1501,13 @@ function App() {
             category={category}
             products={products}
             pageInfo={productPageInfo}
+            sort={productSort}
             loading={productLoading}
             loaded={productLoaded}
             error={productError}
             onOpenDetail={openDetail}
             onChangePage={changeProductPage}
+            onChangeSort={changeProductSort}
           />
         )}
         {page === "search" && <SearchPage onOpenDetail={openDetail} />}
@@ -2316,7 +2353,18 @@ function BoardPage({
   );
 }
 
-function Shop({ category, products, pageInfo, loading, loaded, error, onOpenDetail, onChangePage }: ShopProps) {
+function Shop({
+  category,
+  products,
+  pageInfo,
+  sort,
+  loading,
+  loaded,
+  error,
+  onOpenDetail,
+  onChangePage,
+  onChangeSort,
+}: ShopProps) {
   const title = categoryTabs.find((tab) => tab.value === category)?.label ?? "ALL";
 
   return (
@@ -2324,6 +2372,20 @@ function Shop({ category, products, pageInfo, loading, loaded, error, onOpenDeta
       <div className="page-title">
         <span>SHOP</span>
         <h1>{title}</h1>
+      </div>
+
+      <div className="product-list-toolbar">
+        <select
+          value={sort}
+          onChange={(event) => onChangeSort(event.target.value as ProductSort)}
+          aria-label="상품 정렬"
+        >
+          {productSortOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {error && <p className="state-text">상품 목록을 불러오지 못했습니다.</p>}
@@ -4507,6 +4569,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [emailFindResults, setEmailFindResults] = useState<EmailFindAccount[]>([]);
+  const [socialPasswordFindOpen, setSocialPasswordFindOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serviceTermsOpen, setServiceTermsOpen] = useState(false);
   const [privacyTermsOpen, setPrivacyTermsOpen] = useState(false);
@@ -4568,6 +4631,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setMode(nextMode);
     setMessage(null);
     setEmailFindResults([]);
+    setSocialPasswordFindOpen(false);
     setError(null);
   };
 
@@ -4591,6 +4655,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setSubmitting(true);
     setMessage(null);
     setEmailFindResults([]);
+    setSocialPasswordFindOpen(false);
     setError(null);
 
     try {
@@ -4734,6 +4799,12 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
       setPasswordFindEmail("");
     } catch (submitError) {
       const errorMessage = submitError instanceof Error ? submitError.message : "요청 실패";
+      if (errorMessage.includes("소셜 로그인 회원은 비밀번호를 변경할 수 없습니다")) {
+        setError(null);
+        setSocialPasswordFindOpen(true);
+        return;
+      }
+
       setError(errorMessage);
     } finally {
       setSubmitting(false);
@@ -4746,6 +4817,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setMode("login");
     setMessage(null);
     setEmailFindResults([]);
+    setSocialPasswordFindOpen(false);
     setError(null);
   };
 
@@ -4869,6 +4941,19 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
               <strong>{message}</strong>
               <div>
                 <button type="button" onClick={moveToLogin}>
+                  확인
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {socialPasswordFindOpen && (
+          <div className="email-find-modal-backdrop" role="presentation">
+            <section className="email-find-modal" role="dialog" aria-modal="true">
+              <strong>{"카카오 로그인으로 가입된 계정입니다.\n카카오 로그인을 이용해 주세요."}</strong>
+              <div>
+                <button type="button" onClick={() => setSocialPasswordFindOpen(false)}>
                   확인
                 </button>
               </div>

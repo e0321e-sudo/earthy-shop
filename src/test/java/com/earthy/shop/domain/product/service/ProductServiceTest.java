@@ -31,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,11 +60,11 @@ class ProductServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Product product = product("sunset sea postcard", ProductCategory.POSTCARD, 3500, 100);
 
-        given(productRepository.findByActiveTrueAndDeletedFalse(pageable))
+        given(productRepository.findByActiveTrueAndDeletedFalse(any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(product), pageable, 1));
 
         // when
-        PageResponseDto<ProductResponseDto> response = productService.getProducts(null, pageable);
+        PageResponseDto<ProductResponseDto> response = productService.getProducts(null, "latest", pageable);
 
         // then
         assertThat(response.content()).hasSize(1);
@@ -76,12 +77,12 @@ class ProductServiceTest {
         Pageable pageable = PageRequest.of(0, 20);
         Product product = product("sunset sea poster", ProductCategory.POSTER, 12000, 100);
 
-        given(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(ProductCategory.POSTER, pageable))
+        given(productRepository.findByCategoryAndActiveTrueAndDeletedFalse(eq(ProductCategory.POSTER), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(product), pageable, 1));
         given(productSizeOptionService.getActiveOptions(product)).willReturn(List.of());
 
         // when
-        PageResponseDto<ProductResponseDto> response = productService.getProducts(ProductCategory.POSTER, pageable);
+        PageResponseDto<ProductResponseDto> response = productService.getProducts(ProductCategory.POSTER, "latest", pageable);
 
         // then
         assertThat(response.content()).hasSize(1);
