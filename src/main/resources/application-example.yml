@@ -36,9 +36,6 @@ jwt:
   expiration: ${JWT_EXPIRATION:3600000}
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:1209600000}
 
-toss:
-  secret-key: ${TOSS_SECRET_KEY:your-toss-secret-key}
-
 portone:
   store-id: ${PORTONE_STORE_ID:your-portone-store-id}
   channel-key: ${PORTONE_CHANNEL_KEY:your-portone-channel-key}

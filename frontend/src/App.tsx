@@ -61,7 +61,6 @@ import privacyCollectionText from "./terms/privacy-collection.txt?raw";
 import serviceTermsText from "./terms/service-terms.txt?raw";
 import {
   categoryTabs,
-  products as fallbackProducts,
   type Addon,
   type Product,
   type ProductCategory,
@@ -72,7 +71,6 @@ const DAUM_POSTCODE_SCRIPT_URL = "//t1.daumcdn.net/mapjsapi/bundle/postcode/prod
 const FREE_DELIVERY_MIN_AMOUNT = 30000;
 const BASE_DELIVERY_FEE = 2500;
 const REMOTE_AREA_DELIVERY_FEE = 2000;
-const FALLBACK_PRODUCTS_ENABLED = import.meta.env.DEV;
 const PHONE_PREFIXES = ["010", "011", "016", "017", "018", "019"];
 const DELIVERY_MEMO_OPTIONS = [
   "배송 전에 미리 연락바랍니다.",
@@ -919,11 +917,7 @@ function App() {
         }
       } catch (error) {
         if (!ignore) {
-          const fallbackProduct = FALLBACK_PRODUCTS_ENABLED
-            ? [...products, ...fallbackProducts].find((product) => product.id === productId)
-            : null;
-
-          setProductDetail(fallbackProduct ?? null);
+          setProductDetail(null);
           setProductDetailError(error instanceof Error ? error.message : "상품 상세 조회 실패");
         }
       } finally {
@@ -940,7 +934,7 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [page, selectedProductId, products]);
+  }, [page, selectedProductId]);
 
   // 장바구니 조회
   const loadCart = async () => {
@@ -1151,10 +1145,10 @@ function App() {
     }
 
     const paymentKey = params.get("paymentKey");
-    const tossOrderNumber = params.get("orderId");
+    const legacyOrderNumber = params.get("orderId");
     const amount = params.get("amount");
-    const storedOrderId = tossOrderNumber ? sessionStorage.getItem(`earthyPaymentOrder:${tossOrderNumber}`) : null;
-    const storedRetryOrder = getStoredPaymentOrder(tossOrderNumber);
+    const storedOrderId = legacyOrderNumber ? sessionStorage.getItem(`earthyPaymentOrder:${legacyOrderNumber}`) : null;
+    const storedRetryOrder = getStoredPaymentOrder(legacyOrderNumber);
 
     if (result === "fail") {
       setPaymentResult({
@@ -1168,7 +1162,7 @@ function App() {
       return;
     }
 
-    if (!paymentKey || !tossOrderNumber || !amount || !storedOrderId) {
+    if (!paymentKey || !legacyOrderNumber || !amount || !storedOrderId) {
       setPaymentResult({
         status: "fail",
         message: "결제 승인에 필요한 정보가 없습니다. 주문 내역을 확인해주세요.",
@@ -1182,13 +1176,13 @@ function App() {
     const confirmedPaymentKey = paymentKey;
     const confirmedAmount = Number(amount);
     const confirmedOrderId = Number(storedOrderId);
-    const confirmedTossOrderNumber = tossOrderNumber;
+    const confirmedLegacyOrderNumber = legacyOrderNumber;
 
     setPaymentResult({ status: "processing", message: "결제 승인 중입니다." });
     setPage("paymentResult");
     cleanPaymentUrl();
 
-    // 토스 결제 승인
+    // 외부 결제 승인
     async function approvePayment() {
       try {
         const payment = await confirmPayment(
@@ -1198,13 +1192,13 @@ function App() {
             paymentKey: confirmedPaymentKey,
             amount: confirmedAmount,
           },
-          getOrCreatePaymentConfirmKey(confirmedTossOrderNumber)
+          getOrCreatePaymentConfirmKey(confirmedLegacyOrderNumber)
         );
 
-        await clearPaidCartItems(confirmedTossOrderNumber);
-        sessionStorage.removeItem(`earthyPaymentOrder:${confirmedTossOrderNumber}`);
-        sessionStorage.removeItem(`earthyPaymentOrderData:${confirmedTossOrderNumber}`);
-        sessionStorage.removeItem(`earthyPaymentConfirmKey:${confirmedTossOrderNumber}`);
+        await clearPaidCartItems(confirmedLegacyOrderNumber);
+        sessionStorage.removeItem(`earthyPaymentOrder:${confirmedLegacyOrderNumber}`);
+        sessionStorage.removeItem(`earthyPaymentOrderData:${confirmedLegacyOrderNumber}`);
+        sessionStorage.removeItem(`earthyPaymentConfirmKey:${confirmedLegacyOrderNumber}`);
         await loadMyPage();
         setPaymentResult({
           status: "success",

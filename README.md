@@ -19,4 +19,4 @@ Spring Boot의 `src/main/resources/static`은 상품 이미지 등 정적 asset 
 - EC2 백엔드 배포
 - Vercel 프론트 배포
 - 운영 도메인/HTTPS 연결
-- Toss Payments 운영키 전환
+- PortOne V2 + KG이니시스 운영 결제 점검

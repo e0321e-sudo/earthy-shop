@@ -17,7 +17,7 @@ public class PaymentConfirmRequestDto {
     // PortOne 결제 ID
     private String paymentId;
 
-    // 결제 키 (Toss 호환용)
+    // 결제 키 (외부 PG 결제 식별자 호환용)
     private String paymentKey;
 
     // 결제 금액
