@@ -16,6 +16,7 @@ java {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'software.amazon.awssdk:s3:2.29.15'
+    implementation 'com.twelvemonkeys.imageio:imageio-webp:3.12.0'
     implementation 'org.flywaydb:flyway-core'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'

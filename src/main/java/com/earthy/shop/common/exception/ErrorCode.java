@@ -81,7 +81,7 @@ public enum ErrorCode {
     // 이미지
     IMAGE_CONFIG_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "IMAGE_CONFIG_NOT_FOUND", "이미지 업로드 설정이 필요합니다."),
     INVALID_IMAGE_FILE(HttpStatus.BAD_REQUEST, "INVALID_IMAGE_FILE", "jpg, png, webp 이미지만 업로드할 수 있습니다."),
-    IMAGE_FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "IMAGE_FILE_TOO_LARGE", "이미지는 최대 5MB까지 업로드할 수 있습니다."),
+    IMAGE_FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "IMAGE_FILE_TOO_LARGE", "이미지는 최대 10MB까지 업로드할 수 있습니다."),
     IMAGE_UPLOAD_FAILED(HttpStatus.BAD_REQUEST, "IMAGE_UPLOAD_FAILED", "이미지 업로드에 실패했습니다."),
 
     // 멱등성

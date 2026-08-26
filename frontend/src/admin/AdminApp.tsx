@@ -157,7 +157,7 @@ const ADMIN_CANCEL_REASON_OPTIONS = [
 ];
 
 const LOW_STOCK_THRESHOLD = 0;
-const ADMIN_IMAGE_MAX_SIZE = 5 * 1024 * 1024;
+const ADMIN_IMAGE_MAX_SIZE = 10 * 1024 * 1024;
 const ADMIN_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const ADMIN_IMAGE_ALLOWED_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 type ProductImageField = "imageUrl" | "detailImageUrl";
@@ -1755,7 +1755,7 @@ function ProductForm({
     }
 
     if (file.size > ADMIN_IMAGE_MAX_SIZE) {
-      setUploadError("이미지는 최대 5MB까지 업로드할 수 있습니다.");
+      setUploadError("이미지는 최대 10MB까지 업로드할 수 있습니다.");
       return;
     }
 

@@ -2,6 +2,11 @@ spring:
   application:
     name: earthy-shop
 
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:10MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:12MB}
+
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/earthy_shop?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
     username: ${DB_USERNAME:your_username}
