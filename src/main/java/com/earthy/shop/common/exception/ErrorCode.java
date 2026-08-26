@@ -30,7 +30,7 @@ public enum ErrorCode {
 
     // 멤버
     MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_NOT_FOUND", "회원을 찾을 수 없습니다."),
-    MEMBER_EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_EMAIL_NOT_FOUND", "일치하는 회원 정보를 찾을 수 없습니다."),
+    MEMBER_EMAIL_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_EMAIL_NOT_FOUND", "입력하신 정보와 일치하는 계정을 찾을 수 없습니다."),
     MEMBER_PASSWORD_FIND_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER_PASSWORD_FIND_NOT_FOUND", "일치하는 회원 정보를 찾을 수 없습니다."),
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "DUPLICATE_EMAIL", "이미 사용 중인 이메일입니다."),
     REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "REQUIRED_TERMS_NOT_AGREED", "필수 약관에 동의해주세요."),

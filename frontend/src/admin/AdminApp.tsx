@@ -32,6 +32,8 @@ import {
   getAdminBoard,
   getAdminBoardsPage,
   getAdminMembersPage,
+  getAdminMember,
+  getAdminNotice,
   getAdminNoticesPage,
   getAdminOrder,
   getAdminOrders,
@@ -57,6 +59,71 @@ import {
 import "./admin.css";
 
 type AdminTab = "dashboard" | "products" | "addons" | "orders" | "customers" | "notices" | "boards" | "password";
+
+const ADMIN_TAB_PATHS: Record<AdminTab, string> = {
+  dashboard: "/admin",
+  products: "/admin/products",
+  addons: "/admin/addons",
+  orders: "/admin/orders",
+  customers: "/admin/customers",
+  notices: "/admin/notices",
+  boards: "/admin/inquiries",
+  password: "/admin/password",
+};
+
+function normalizeAdminPath(pathname = window.location.pathname) {
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized || "/admin";
+}
+
+function getAdminTabFromPath(pathname = window.location.pathname): AdminTab {
+  const path = normalizeAdminPath(pathname);
+
+  if (path.startsWith("/admin/products")) {
+    return "products";
+  }
+  if (path.startsWith("/admin/addons")) {
+    return "addons";
+  }
+  if (path.startsWith("/admin/orders")) {
+    return "orders";
+  }
+  if (path.startsWith("/admin/customers") || path.startsWith("/admin/members")) {
+    return "customers";
+  }
+  if (path.startsWith("/admin/notices")) {
+    return "notices";
+  }
+  if (path.startsWith("/admin/inquiries") || path.startsWith("/admin/boards")) {
+    return "boards";
+  }
+  if (path.startsWith("/admin/password")) {
+    return "password";
+  }
+
+  return "dashboard";
+}
+
+function getAdminRouteId(prefix: string) {
+  const path = normalizeAdminPath();
+  const match = path.match(new RegExp(`^${prefix}/(\\d+)(?:/edit)?$`));
+  return match ? Number(match[1]) : null;
+}
+
+function setAdminHistory(path: string, replace = false) {
+  const current = `${window.location.pathname}${window.location.search}`;
+
+  if (current === path) {
+    return;
+  }
+
+  if (replace) {
+    window.history.replaceState({}, "", path);
+    return;
+  }
+
+  window.history.pushState({}, "", path);
+}
 
 // 멱등성 키 생성
 function createIdempotencyKey() {
@@ -272,7 +339,7 @@ function getNextOrderStatus(status: OrderStatus): OrderStatus | "" {
 
 export default function AdminApp() {
   const [isAuthed, setIsAuthed] = useState(() => Boolean(getStoredAdminAccessToken()));
-  const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => getAdminTabFromPath());
   const [loginError, setLoginError] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [productsMenuKey, setProductsMenuKey] = useState(0);
@@ -286,7 +353,18 @@ export default function AdminApp() {
 
   useEffect(() => onAdminAuthCleared(() => setIsAuthed(false)), []);
 
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(getAdminTabFromPath());
+      setIsMobileMenuOpen(false);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   function changeTab(tab: AdminTab) {
+    setAdminHistory(ADMIN_TAB_PATHS[tab]);
     setActiveTab(tab);
     if (tab === "products") {
       setProductsMenuKey((current) => current + 1);
@@ -308,17 +386,20 @@ export default function AdminApp() {
 
   function openDashboardProduct(product: AdminProduct) {
     setDashboardProductTarget(product);
-    changeTab("products");
+    setAdminHistory(`${ADMIN_TAB_PATHS.products}/${product.id}/edit`);
+    setActiveTab("products");
   }
 
   function openDashboardOrder(order: AdminOrder) {
     setDashboardOrderTargetId(order.orderId);
-    changeTab("orders");
+    setAdminHistory(`${ADMIN_TAB_PATHS.orders}/${order.orderId}`);
+    setActiveTab("orders");
   }
 
   function openDashboardAddon(addon: AdminAddon) {
     setDashboardAddonTarget(addon);
-    changeTab("addons");
+    setAdminHistory(`${ADMIN_TAB_PATHS.addons}/${addon.id}/edit`);
+    setActiveTab("addons");
   }
 
   async function handleLogin(email: string, password: string) {
@@ -758,14 +839,25 @@ function OrdersPanel({
     }
   }
 
-  async function openOrder(orderId: number) {
+  async function openOrder(orderId: number, pushHistory = true) {
     setError("");
 
     try {
       setSelectedOrder(await getAdminOrder(orderId));
       setIsDetailView(true);
+      if (pushHistory) {
+        setAdminHistory(`${ADMIN_TAB_PATHS.orders}/${orderId}`);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "주문 상세를 불러오지 못했습니다.");
+    }
+  }
+
+  function closeOrderDetail(pushHistory = true) {
+    setSelectedOrder(null);
+    setIsDetailView(false);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.orders);
     }
   }
 
@@ -774,7 +866,7 @@ function OrdersPanel({
   }, [currentPage]);
 
   useEffect(() => {
-    setIsDetailView(false);
+    closeOrderDetail(false);
   }, [menuKey]);
 
   useEffect(() => {
@@ -782,9 +874,30 @@ function OrdersPanel({
       return;
     }
 
-    void openOrder(initialOrderId);
+    void openOrder(initialOrderId, false);
     onInitialOrderOpened();
   }, [initialOrderId]);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "orders") {
+        return;
+      }
+
+      const orderId = getAdminRouteId(ADMIN_TAB_PATHS.orders);
+
+      if (orderId) {
+        void openOrder(orderId, false);
+        return;
+      }
+
+      closeOrderDetail(false);
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
 
   async function handleStatusUpdate(orderId: number, status: OrderStatus, carrier: string, trackingNumber: string) {
     setNotice("");
@@ -825,7 +938,7 @@ function OrdersPanel({
           title="주문 관리"
           description=""
           action={
-            <button className="admin-title-back-button" type="button" onClick={() => setIsDetailView(false)}>
+            <button className="admin-title-back-button" type="button" onClick={() => closeOrderDetail()}>
               목록으로 돌아가기
               <span aria-hidden="true" />
             </button>
@@ -1338,6 +1451,7 @@ function ProductsPanel({
       setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
       setEditingId(null);
       setIsFormView(false);
+      setAdminHistory(ADMIN_TAB_PATHS.products);
       await loadProducts(currentPage);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "상품 저장에 실패했습니다.");
@@ -1411,7 +1525,7 @@ function ProductsPanel({
     setDeleteTarget(product);
   }
 
-  function startEdit(product: AdminProduct) {
+  function startEdit(product: AdminProduct, pushHistory = true) {
     const sizeOptions = product.sizeOptions?.map((option) => ({
       id: option.id,
       sizeName: option.sizeName,
@@ -1436,13 +1550,23 @@ function ProductsPanel({
       sizeOptions: product.category === "POSTER" ? ensurePosterSizeOptions(sizeOptions) : [],
     });
     setIsFormView(true);
+    if (pushHistory) {
+      setAdminHistory(`${ADMIN_TAB_PATHS.products}/${product.id}/edit`);
+    }
   }
 
-  useEffect(() => {
+  function closeProductForm(pushHistory = true) {
     setEditingId(null);
     setForm(emptyProductForm);
     setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
     setIsFormView(false);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.products);
+    }
+  }
+
+  useEffect(() => {
+    closeProductForm(false);
     setStatusTarget(null);
     setDeleteTarget(null);
     setError("");
@@ -1454,22 +1578,74 @@ function ProductsPanel({
       return;
     }
 
-    startEdit(initialProduct);
+    startEdit(initialProduct, false);
     onInitialProductOpened();
   }, [initialProduct?.id]);
+
+  useEffect(() => {
+    if (getAdminTabFromPath() !== "products") {
+      return;
+    }
+
+    const productId = getAdminRouteId(ADMIN_TAB_PATHS.products);
+
+    if (productId && normalizeAdminPath().endsWith("/edit")) {
+      const product = products.find((item) => item.id === productId);
+
+      if (product) {
+        startEdit(product, false);
+      }
+    }
+  }, [products]);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "products") {
+        return;
+      }
+
+      const path = normalizeAdminPath();
+
+      if (path === `${ADMIN_TAB_PATHS.products}/new`) {
+        setEditingId(null);
+        setForm(emptyProductForm);
+        setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
+        setIsFormView(true);
+        return;
+      }
+
+      const productId = getAdminRouteId(ADMIN_TAB_PATHS.products);
+
+      if (productId && path.endsWith("/edit")) {
+        const product = products.find((item) => item.id === productId);
+
+        if (product) {
+          startEdit(product, false);
+        }
+
+        return;
+      }
+
+      if (path === ADMIN_TAB_PATHS.products) {
+        closeProductForm(false);
+      }
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, [products]);
 
   function openCreateForm() {
     setEditingId(null);
     setForm(emptyProductForm);
     setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
     setIsFormView(true);
+    setAdminHistory(`${ADMIN_TAB_PATHS.products}/new`);
   }
 
   function closeForm() {
-    setEditingId(null);
-    setForm(emptyProductForm);
-    setEditingOriginalImageUrls(emptyProductOriginalImageUrls);
-    setIsFormView(false);
+    closeProductForm();
   }
 
   if (isFormView) {
@@ -1986,6 +2162,7 @@ function AddonsPanel({
       setForm(emptyAddonForm);
       setEditingId(null);
       setIsFormView(false);
+      setAdminHistory(ADMIN_TAB_PATHS.addons);
       await loadAddons(currentPage);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "추가상품 저장에 실패했습니다.");
@@ -2059,7 +2236,7 @@ function AddonsPanel({
     setDeleteTarget(addon);
   }
 
-  function startEdit(addon: AdminAddon) {
+  function startEdit(addon: AdminAddon, pushHistory = true) {
     setEditingId(addon.id);
     setForm({
       name: addon.name,
@@ -2068,12 +2245,22 @@ function AddonsPanel({
       stockQuantity: addon.stockQuantity,
     });
     setIsFormView(true);
+    if (pushHistory) {
+      setAdminHistory(`${ADMIN_TAB_PATHS.addons}/${addon.id}/edit`);
+    }
   }
 
-  useEffect(() => {
+  function closeAddonForm(pushHistory = true) {
     setEditingId(null);
     setForm(emptyAddonForm);
     setIsFormView(false);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.addons);
+    }
+  }
+
+  useEffect(() => {
+    closeAddonForm(false);
     setStatusTarget(null);
     setDeleteTarget(null);
     setError("");
@@ -2085,20 +2272,72 @@ function AddonsPanel({
       return;
     }
 
-    startEdit(initialAddon);
+    startEdit(initialAddon, false);
     onInitialAddonOpened();
   }, [initialAddon?.id]);
+
+  useEffect(() => {
+    if (getAdminTabFromPath() !== "addons") {
+      return;
+    }
+
+    const addonId = getAdminRouteId(ADMIN_TAB_PATHS.addons);
+
+    if (addonId && normalizeAdminPath().endsWith("/edit")) {
+      const addon = addons.find((item) => item.id === addonId);
+
+      if (addon) {
+        startEdit(addon, false);
+      }
+    }
+  }, [addons]);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "addons") {
+        return;
+      }
+
+      const path = normalizeAdminPath();
+
+      if (path === `${ADMIN_TAB_PATHS.addons}/new`) {
+        setEditingId(null);
+        setForm(emptyAddonForm);
+        setIsFormView(true);
+        return;
+      }
+
+      const addonId = getAdminRouteId(ADMIN_TAB_PATHS.addons);
+
+      if (addonId && path.endsWith("/edit")) {
+        const addon = addons.find((item) => item.id === addonId);
+
+        if (addon) {
+          startEdit(addon, false);
+        }
+
+        return;
+      }
+
+      if (path === ADMIN_TAB_PATHS.addons) {
+        closeAddonForm(false);
+      }
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, [addons]);
 
   function openCreateForm() {
     setEditingId(null);
     setForm(emptyAddonForm);
     setIsFormView(true);
+    setAdminHistory(`${ADMIN_TAB_PATHS.addons}/new`);
   }
 
   function closeForm() {
-    setEditingId(null);
-    setForm(emptyAddonForm);
-    setIsFormView(false);
+    closeAddonForm();
   }
 
   if (isFormView) {
@@ -2417,9 +2656,52 @@ function CustomersPanel() {
     }
   }
 
+  async function openMember(memberId: number, pushHistory = true) {
+    setError("");
+
+    try {
+      setSelectedMember(await getAdminMember(memberId));
+      if (pushHistory) {
+        setAdminHistory(`${ADMIN_TAB_PATHS.customers}/${memberId}`);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "고객 상세를 불러오지 못했습니다.");
+    }
+  }
+
+  function closeMemberDetail(pushHistory = true) {
+    setSelectedMember(null);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.customers);
+    }
+  }
+
   useEffect(() => {
     void loadMembers();
   }, [status, currentPage]);
+
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "customers") {
+        return;
+      }
+
+      const memberId =
+        getAdminRouteId(ADMIN_TAB_PATHS.customers) ??
+        getAdminRouteId("/admin/members");
+
+      if (memberId) {
+        void openMember(memberId, false);
+        return;
+      }
+
+      closeMemberDetail(false);
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
 
   return (
     <section className="admin-section">
@@ -2467,7 +2749,7 @@ function CustomersPanel() {
                   members.map((member) => (
                     <tr key={member.id}>
                       <td>
-                        <button className="admin-order-number-button" type="button" onClick={() => setSelectedMember(member)}>
+                        <button className="admin-order-number-button" type="button" onClick={() => void openMember(member.id)}>
                           {member.email}
                         </button>
                       </td>
@@ -2512,7 +2794,7 @@ function CustomersPanel() {
               </div>
             </dl>
             <div className="admin-modal-actions admin-member-modal-actions">
-              <button className="admin-primary-button" type="button" onClick={() => setSelectedMember(null)}>
+              <button className="admin-primary-button" type="button" onClick={() => closeMemberDetail()}>
                 확인
               </button>
             </div>
@@ -2559,6 +2841,16 @@ function NoticesPanel() {
     void loadNotices();
   }, [appliedKeyword, visibility, currentPage]);
 
+  function closeNoticeView(pushHistory = true) {
+    setSelectedNotice(null);
+    setIsFormOpen(false);
+    setEditingId(null);
+    setForm(emptyNoticeForm);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.notices);
+    }
+  }
+
   function openCreateForm() {
     setEditingId(null);
     setForm(emptyNoticeForm);
@@ -2567,9 +2859,10 @@ function NoticesPanel() {
     setIsFormOpen(true);
     setNotice("");
     setError("");
+    setAdminHistory(`${ADMIN_TAB_PATHS.notices}/new`);
   }
 
-  function openEditForm(item: Notice) {
+  function openEditForm(item: Notice, pushHistory = true) {
     setEditingId(item.id);
     setForm({ title: item.title, content: item.content });
     setSelectedNotice(null);
@@ -2577,6 +2870,25 @@ function NoticesPanel() {
     setIsFormOpen(true);
     setNotice("");
     setError("");
+    if (pushHistory) {
+      setAdminHistory(`${ADMIN_TAB_PATHS.notices}/${item.id}/edit`);
+    }
+  }
+
+  async function openNotice(noticeId: number, pushHistory = true) {
+    setNotice("");
+    setError("");
+
+    try {
+      setSelectedNotice(await getAdminNotice(noticeId));
+      setIsFormOpen(false);
+      setEditingId(null);
+      if (pushHistory) {
+        setAdminHistory(`${ADMIN_TAB_PATHS.notices}/${noticeId}`);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "공지 상세를 불러오지 못했습니다.");
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2596,6 +2908,7 @@ function NoticesPanel() {
       setIsFormOpen(false);
       setEditingId(null);
       setForm(emptyNoticeForm);
+      setAdminHistory(ADMIN_TAB_PATHS.notices);
       await loadNotices(currentPage);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "공지사항 저장에 실패했습니다.");
@@ -2620,13 +2933,50 @@ function NoticesPanel() {
     }
   }
 
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "notices") {
+        return;
+      }
+
+      const path = normalizeAdminPath();
+      const noticeId = getAdminRouteId(ADMIN_TAB_PATHS.notices);
+
+      if (path === `${ADMIN_TAB_PATHS.notices}/new`) {
+        setEditingId(null);
+        setForm(emptyNoticeForm);
+        setSelectedNotice(null);
+        setIsFormOpen(true);
+        return;
+      }
+
+      if (noticeId && path.endsWith("/edit")) {
+        void getAdminNotice(noticeId)
+          .then((item) => openEditForm(item, false))
+          .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "공지 상세를 불러오지 못했습니다."));
+        return;
+      }
+
+      if (noticeId) {
+        void openNotice(noticeId, false);
+        return;
+      }
+
+      closeNoticeView(false);
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
   if (selectedNotice) {
     return (
       <section className="admin-section">
         <PanelHeader
           title="공지관리"
           action={
-            <button className="admin-title-back-button" type="button" onClick={() => setSelectedNotice(null)}>
+            <button className="admin-title-back-button" type="button" onClick={() => closeNoticeView()}>
               목록으로 돌아가기 <span aria-hidden="true" />
             </button>
           }
@@ -2655,7 +3005,7 @@ function NoticesPanel() {
         <PanelHeader
           title="공지관리"
           action={
-            <button className="admin-title-back-button" type="button" onClick={() => setIsFormOpen(false)}>
+            <button className="admin-title-back-button" type="button" onClick={() => closeNoticeView()}>
               목록으로 돌아가기 <span aria-hidden="true" />
             </button>
           }
@@ -2672,7 +3022,7 @@ function NoticesPanel() {
             <textarea value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} rows={18} />
           </label>
           <div className="admin-button-row">
-            <button className="admin-outline-button" type="button" onClick={() => setIsFormOpen(false)}>
+            <button className="admin-outline-button" type="button" onClick={() => closeNoticeView()}>
               취소
             </button>
             <button className="admin-primary-button" type="submit">
@@ -2737,7 +3087,7 @@ function NoticesPanel() {
                   notices.map((item) => (
                     <tr key={item.id} className={!item.visible ? "is-muted-row" : ""}>
                       <td>
-                        <button className="admin-order-number-button" type="button" onClick={() => setSelectedNotice(item)}>
+                        <button className="admin-order-number-button" type="button" onClick={() => void openNotice(item.id)}>
                           {item.title}
                           {isCreatedToday(item.createdAt) && <b className="admin-new-icon" aria-label="새 글">N</b>}
                         </button>
@@ -2829,7 +3179,7 @@ function BoardsPanel() {
     }
   }
 
-  async function openBoard(boardId: number) {
+  async function openBoard(boardId: number, pushHistory = true) {
     setError("");
 
     try {
@@ -2837,8 +3187,20 @@ function BoardsPanel() {
       setSelectedBoard(data);
       setAnswer(data.answer ?? "");
       setAnswerEditing(false);
+      if (pushHistory) {
+        setAdminHistory(`${ADMIN_TAB_PATHS.boards}/${boardId}`);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "게시글 상세를 불러오지 못했습니다.");
+    }
+  }
+
+  function closeBoardDetail(pushHistory = true) {
+    setSelectedBoard(null);
+    setAnswer("");
+    setAnswerEditing(false);
+    if (pushHistory) {
+      setAdminHistory(ADMIN_TAB_PATHS.boards);
     }
   }
 
@@ -2868,13 +3230,36 @@ function BoardsPanel() {
     void loadBoards();
   }, [appliedKeyword, currentPage]);
 
+  useEffect(() => {
+    const syncRoute = () => {
+      if (getAdminTabFromPath() !== "boards") {
+        return;
+      }
+
+      const boardId =
+        getAdminRouteId(ADMIN_TAB_PATHS.boards) ??
+        getAdminRouteId("/admin/boards");
+
+      if (boardId) {
+        void openBoard(boardId, false);
+        return;
+      }
+
+      closeBoardDetail(false);
+    };
+
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
   if (selectedBoard) {
     return (
       <section className="admin-section">
         <PanelHeader
           title="문의관리"
           action={
-            <button className="admin-title-back-button" type="button" onClick={() => setSelectedBoard(null)}>
+            <button className="admin-title-back-button" type="button" onClick={() => closeBoardDetail()}>
               목록으로 돌아가기
               <span aria-hidden="true" />
             </button>

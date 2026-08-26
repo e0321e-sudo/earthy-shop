@@ -2745,7 +2745,7 @@ function ProductDetail({
           {(product.category === "POSTER" || productAddons.length > 0) && (
             <div className="addon-box">
               {product.category === "POSTER" && (
-                <div className="option-choice-group">
+                <div className="option-choice-group size-choice-group">
                   <span className="option-section-title">사이즈</span>
                   <div className={`option-control addon-group-header ${sizeOptionsOpen ? "is-open" : ""}`}>
                     <button
@@ -4751,8 +4751,8 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
         return;
       }
 
-      if (!/^010-[0-9]{4}-[0-9]{4}$/.test(emailFindForm.phone)) {
-        setError("연락처는 010-0000-0000 형식으로 입력해주세요.");
+      if (!/^[0-9]{3}-[0-9]{4}-[0-9]{4}$/.test(emailFindForm.phone)) {
+        setError("연락처 형식을 확인해주세요.");
         return;
       }
 
