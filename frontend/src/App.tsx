@@ -72,6 +72,7 @@ const DAUM_POSTCODE_SCRIPT_URL = "//t1.daumcdn.net/mapjsapi/bundle/postcode/prod
 const FREE_DELIVERY_MIN_AMOUNT = 30000;
 const BASE_DELIVERY_FEE = 2500;
 const REMOTE_AREA_DELIVERY_FEE = 2000;
+const FALLBACK_PRODUCTS_ENABLED = import.meta.env.DEV;
 const PHONE_PREFIXES = ["010", "011", "016", "017", "018", "019"];
 const DELIVERY_MEMO_OPTIONS = [
   "배송 전에 미리 연락바랍니다.",
@@ -331,6 +332,7 @@ interface ShopProps {
   products: Product[];
   pageInfo: ProductPageResponse<Product>;
   loading: boolean;
+  loaded: boolean;
   error: string | null;
   onOpenDetail: (productId: number) => void;
   onChangePage: (page: number) => void;
@@ -716,10 +718,11 @@ function App() {
   const [cartError, setCartError] = useState<string | null>(null);
 
   // 상품 상태
-  const [products, setProducts] = useState<Product[]>(fallbackProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [productPageInfo, setProductPageInfo] = useState<ProductPageResponse<Product>>(() => createEmptyPage<Product>());
   const [productPage, setProductPage] = useState(initialRoute.productPage ?? 0);
-  const [productLoading, setProductLoading] = useState(false);
+  const [productLoading, setProductLoading] = useState(initialRoute.page === "shop");
+  const [productLoaded, setProductLoaded] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
   const [productDetail, setProductDetail] = useState<Product | null>(null);
   const [productDetailLoading, setProductDetailLoading] = useState(false);
@@ -758,6 +761,11 @@ function App() {
     if (route.page === "shop") {
       setCategory(route.category ?? "ALL");
       setProductPage(route.productPage ?? 0);
+      setProducts([]);
+      setProductPageInfo(createEmptyPage<Product>());
+      setProductLoading(true);
+      setProductLoaded(false);
+      setProductError(null);
       setSelectedProductId(null);
       setProductDetail(null);
       return;
@@ -859,7 +867,10 @@ function App() {
 
     async function fetchProducts() {
       setProductLoading(true);
+      setProductLoaded(false);
       setProductError(null);
+      setProducts([]);
+      setProductPageInfo(createEmptyPage<Product>());
 
       try {
         const data = await getProductsPage(category, productPage);
@@ -867,15 +878,13 @@ function App() {
         if (!ignore) {
           setProducts(data.content);
           setProductPageInfo(data);
+          setProductLoaded(true);
         }
       } catch (error) {
         if (!ignore) {
-          setProducts(
-            category === "ALL"
-              ? fallbackProducts
-              : fallbackProducts.filter((product) => product.category === category)
-          );
+          setProducts([]);
           setProductPageInfo(createEmptyPage<Product>());
+          setProductLoaded(true);
           setProductError(error instanceof Error ? error.message : "상품 목록 조회 실패");
         }
       } finally {
@@ -910,9 +919,9 @@ function App() {
         }
       } catch (error) {
         if (!ignore) {
-          const fallbackProduct = [...products, ...fallbackProducts].find(
-            (product) => product.id === productId
-          );
+          const fallbackProduct = FALLBACK_PRODUCTS_ENABLED
+            ? [...products, ...fallbackProducts].find((product) => product.id === productId)
+            : null;
 
           setProductDetail(fallbackProduct ?? null);
           setProductDetailError(error instanceof Error ? error.message : "상품 상세 조회 실패");
@@ -1464,6 +1473,7 @@ function App() {
             products={products}
             pageInfo={productPageInfo}
             loading={productLoading}
+            loaded={productLoaded}
             error={productError}
             onOpenDetail={openDetail}
             onChangePage={changeProductPage}
@@ -2312,7 +2322,7 @@ function BoardPage({
   );
 }
 
-function Shop({ category, products, pageInfo, loading, error, onOpenDetail, onChangePage }: ShopProps) {
+function Shop({ category, products, pageInfo, loading, loaded, error, onOpenDetail, onChangePage }: ShopProps) {
   const title = categoryTabs.find((tab) => tab.value === category)?.label ?? "ALL";
 
   return (
@@ -2322,11 +2332,12 @@ function Shop({ category, products, pageInfo, loading, error, onOpenDetail, onCh
         <h1>{title}</h1>
       </div>
 
-      {loading && <p className="state-text">상품을 불러오는 중입니다.</p>}
-      {error && <p className="state-text">백엔드 연결 전이라 임시 상품을 보여줍니다.</p>}
-      {!loading && !error && products.length === 0 && <p className="state-text">상품이 없습니다.</p>}
+      {error && <p className="state-text">상품 목록을 불러오지 못했습니다.</p>}
+      {!loading && loaded && !error && products.length === 0 && (
+        <p className="state-text">상품을 준비중입니다.</p>
+      )}
 
-      {products.length > 0 && (
+      {!loading && !error && products.length > 0 && (
         <div className="product-grid">
           {products.map((product) => (
             <button
