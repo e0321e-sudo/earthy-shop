@@ -167,6 +167,149 @@ type PaymentResultState =
   | { status: "success"; message: string; payment: PaymentResponse }
   | { status: "fail"; message: string; retryOrder?: OrderResponse; showCancelNotice?: boolean };
 
+type CustomerRoute = {
+  page: Page;
+  category?: ProductCategory;
+  productId?: number;
+  productPage?: number;
+};
+
+const CATEGORY_ROUTE_SEGMENTS: Record<ProductCategory, string> = {
+  ALL: "",
+  POSTCARD: "postcard",
+  POSTER: "poster",
+  ETC: "etc",
+};
+
+const ROUTE_SEGMENT_CATEGORIES: Record<string, ProductCategory> = {
+  postcard: "POSTCARD",
+  poster: "POSTER",
+  etc: "ETC",
+};
+
+function readPageParam(search: string) {
+  const pageParam = new URLSearchParams(search).get("page");
+  const parsedPage = pageParam === null ? 0 : Number(pageParam);
+
+  return Number.isInteger(parsedPage) && parsedPage >= 0 ? parsedPage : 0;
+}
+
+function readCustomerRouteFromLocation(): CustomerRoute {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  if (path === "/products") {
+    return { page: "shop", category: "ALL", productPage: readPageParam(window.location.search) };
+  }
+
+  const productPathMatch = path.match(/^\/products\/([^/]+)$/);
+
+  if (productPathMatch) {
+    const segment = productPathMatch[1];
+    const categoryFromSegment = ROUTE_SEGMENT_CATEGORIES[segment];
+
+    if (categoryFromSegment) {
+      return { page: "shop", category: categoryFromSegment, productPage: readPageParam(window.location.search) };
+    }
+
+    const productId = Number(segment);
+
+    if (Number.isInteger(productId) && productId > 0) {
+      return { page: "detail", productId };
+    }
+  }
+
+  if (path === "/search") {
+    return { page: "search" };
+  }
+
+  if (path === "/about") {
+    return { page: "about" };
+  }
+
+  if (path === "/notice") {
+    return { page: "notice" };
+  }
+
+  if (path === "/qna") {
+    return { page: "board" };
+  }
+
+  if (path === "/cart") {
+    return { page: "cart" };
+  }
+
+  if (path === "/checkout") {
+    return { page: "checkout" };
+  }
+
+  if (path === "/payment-result") {
+    return { page: "paymentResult" };
+  }
+
+  if (path === "/mypage") {
+    return { page: "mypage" };
+  }
+
+  if (path === "/auth") {
+    return { page: "auth" };
+  }
+
+  return { page: "home" };
+}
+
+function createCustomerRouteUrl(route: CustomerRoute) {
+  if (route.page === "shop") {
+    const category = route.category ?? "ALL";
+    const segment = CATEGORY_ROUTE_SEGMENTS[category];
+    const path = segment ? `/products/${segment}` : "/products";
+    const pageQuery = route.productPage && route.productPage > 0 ? `?page=${route.productPage}` : "";
+
+    return `${path}${pageQuery}`;
+  }
+
+  if (route.page === "detail" && route.productId) {
+    return `/products/${route.productId}`;
+  }
+
+  if (route.page === "search") {
+    return "/search";
+  }
+
+  if (route.page === "about") {
+    return "/about";
+  }
+
+  if (route.page === "notice") {
+    return "/notice";
+  }
+
+  if (route.page === "board") {
+    return "/qna";
+  }
+
+  if (route.page === "cart") {
+    return "/cart";
+  }
+
+  if (route.page === "checkout") {
+    return "/checkout";
+  }
+
+  if (route.page === "paymentResult") {
+    return "/payment-result";
+  }
+
+  if (route.page === "mypage") {
+    return "/mypage";
+  }
+
+  if (route.page === "auth") {
+    return "/auth";
+  }
+
+  return "/";
+}
+
 interface HeaderProps {
   page: Page;
   category: ProductCategory;
@@ -558,10 +701,12 @@ function getStoredPaymentCartItemIds(orderNumber: string | null): number[] {
 }
 
 function App() {
+  const initialRoute = useRef(readCustomerRouteFromLocation()).current;
+
   // 화면 전환 상태
-  const [page, setPage] = useState<Page>("home");
-  const [category, setCategory] = useState<ProductCategory>("ALL");
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [page, setPage] = useState<Page>(initialRoute.page);
+  const [category, setCategory] = useState<ProductCategory>(initialRoute.category ?? "ALL");
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(initialRoute.productId ?? null);
   const [noticePageKey, setNoticePageKey] = useState(0);
   const [boardPageKey, setBoardPageKey] = useState(0);
 
@@ -573,7 +718,7 @@ function App() {
   // 상품 상태
   const [products, setProducts] = useState<Product[]>(fallbackProducts);
   const [productPageInfo, setProductPageInfo] = useState<ProductPageResponse<Product>>(() => createEmptyPage<Product>());
-  const [productPage, setProductPage] = useState(0);
+  const [productPage, setProductPage] = useState(initialRoute.productPage ?? 0);
   const [productLoading, setProductLoading] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
   const [productDetail, setProductDetail] = useState<Product | null>(null);
@@ -607,6 +752,46 @@ function App() {
     : cartItems;
   const checkoutTotal = checkoutItems.reduce((sum, item) => sum + item.itemTotalPrice, 0);
 
+  const applyCustomerRoute = (route: CustomerRoute) => {
+    setPage(route.page);
+
+    if (route.page === "shop") {
+      setCategory(route.category ?? "ALL");
+      setProductPage(route.productPage ?? 0);
+      setSelectedProductId(null);
+      setProductDetail(null);
+      return;
+    }
+
+    if (route.page === "detail" && route.productId) {
+      setSelectedProductId(route.productId);
+      setProductDetail(null);
+      return;
+    }
+
+    setSelectedProductId(null);
+    setProductDetail(null);
+  };
+
+  const navigateCustomerRoute = (route: CustomerRoute, options?: { replace?: boolean; scroll?: boolean }) => {
+    applyCustomerRoute(route);
+
+    const nextUrl = createCustomerRouteUrl(route);
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+    if (nextUrl !== currentUrl) {
+      if (options?.replace) {
+        window.history.replaceState({}, "", nextUrl);
+      } else {
+        window.history.pushState({}, "", nextUrl);
+      }
+    }
+
+    if (options?.scroll !== false) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   // 고객용 사이트 전체 우클릭 메뉴 차단
   useEffect(() => {
     const preventCustomerContextMenu = (event: Event) => {
@@ -621,8 +806,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    setProductPage(0);
-  }, [category]);
+    const handlePopState = () => {
+      applyCustomerRoute(readCustomerRouteFromLocation());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   // 소셜 로그인 완료 토큰 저장
   useEffect(() => {
@@ -640,7 +833,7 @@ function App() {
     setAccessToken(oauthAccessToken);
     setPage("home");
 
-    window.history.replaceState({}, "", window.location.pathname);
+    window.history.replaceState({}, "", "/");
   }, []);
 
   // 리프레시 토큰 재발급 실패 시 로그인 상태 정리
@@ -1049,49 +1242,39 @@ function App() {
 
   // 홈 이동
   const goHome = () => {
-    setPage("home");
-    setSelectedProductId(null);
-    setProductDetail(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "home" });
   };
 
   // 카테고리 이동
   const openCategory = (nextCategory: ProductCategory) => {
-    setCategory(nextCategory);
-    setPage("shop");
-    setSelectedProductId(null);
-    setProductDetail(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "shop", category: nextCategory, productPage: 0 });
   };
 
   // 상품 상세 이동
   const openDetail = (productId: number) => {
-    setSelectedProductId(productId);
-    setProductDetail(null);
-    setPage("detail");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "detail", productId });
   };
 
   // 공지사항 화면 이동
   const openNotice = () => {
     setNoticePageKey((key) => key + 1);
-    setPage("notice");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "notice" });
   };
 
   // 게시판 화면 이동
   const openBoard = () => {
     setBoardPageKey((key) => key + 1);
-    setPage("board");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "board" });
   };
 
   // 상품 검색 화면 이동
   const openSearch = () => {
-    setPage("search");
-    setSelectedProductId(null);
-    setProductDetail(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "search" });
+  };
+
+  // 상품 목록 페이지 이동
+  const changeProductPage = (nextProductPage: number) => {
+    navigateCustomerRoute({ page: "shop", category, productPage: nextProductPage });
   };
 
   // 로그인 필요 화면 진입 검증
@@ -1101,8 +1284,7 @@ function App() {
     }
 
     setAuthPageKey((key) => key + 1);
-    setPage("auth");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "auth" });
     return false;
   };
 
@@ -1130,8 +1312,7 @@ function App() {
 
     if (accessToken) {
       setCheckoutCartItemIds(undefined);
-      setPage("checkout");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigateCustomerRoute({ page: "checkout" });
     }
   };
 
@@ -1188,20 +1369,18 @@ function App() {
     if (accessToken) {
       setMyPageInitialView("home");
       setMyPageKey((key) => key + 1);
-      setPage("mypage");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigateCustomerRoute({ page: "mypage" });
       return;
     }
 
     setAuthPageKey((key) => key + 1);
-    setPage("auth");
+    navigateCustomerRoute({ page: "auth" });
   };
 
   // 장바구니 화면 이동
   const openCart = () => {
     setCartNoticeOpen(false);
-    setPage("cart");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigateCustomerRoute({ page: "cart" });
   };
 
   // 회원 정보 수정
@@ -1239,7 +1418,7 @@ function App() {
     setMember(null);
     setOrders([]);
     setCartItems([]);
-    setPage("home");
+    navigateCustomerRoute({ page: "home" });
   };
 
   // 로그아웃
@@ -1255,8 +1434,7 @@ function App() {
       localStorage.removeItem("earthyRefreshToken");
       setAccessToken(null);
       setCartItems([]);
-      setPage("home");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      navigateCustomerRoute({ page: "home" });
     }
   };
 
@@ -1270,7 +1448,7 @@ function App() {
         loggedIn={Boolean(accessToken)}
         onHome={goHome}
         onCategory={openCategory}
-        onAbout={() => setPage("about")}
+        onAbout={() => navigateCustomerRoute({ page: "about" })}
         onNotice={openNotice}
         onBoard={openBoard}
         onSearch={openSearch}
@@ -1288,7 +1466,7 @@ function App() {
             loading={productLoading}
             error={productError}
             onOpenDetail={openDetail}
-            onChangePage={setProductPage}
+            onChangePage={changeProductPage}
           />
         )}
         {page === "search" && <SearchPage onOpenDetail={openDetail} />}
@@ -1322,8 +1500,7 @@ function App() {
             onRemove={removeCartItem}
             onCheckout={(cartItemIds) => {
               setCheckoutCartItemIds(cartItemIds);
-              setPage("checkout");
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              navigateCustomerRoute({ page: "checkout" });
             }}
           />
         )}
@@ -1343,12 +1520,10 @@ function App() {
             onMoveOrders={() => {
               setMyPageInitialView("orders");
               setMyPageKey((key) => key + 1);
-              setPage("mypage");
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              navigateCustomerRoute({ page: "mypage" });
             }}
             onMoveCart={() => {
-              setPage("cart");
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              navigateCustomerRoute({ page: "cart" });
             }}
           />
         )}
@@ -1376,7 +1551,7 @@ function App() {
               localStorage.setItem("earthyAccessToken", loginResponse.accessToken);
               localStorage.setItem("earthyRefreshToken", loginResponse.refreshToken);
               setAccessToken(loginResponse.accessToken);
-              setPage("home");
+              navigateCustomerRoute({ page: "home" });
             }}
           />
         )}
