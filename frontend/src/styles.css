@@ -707,7 +707,9 @@ main {
 }
 
 .product-detail-content img {
-  width: min(920px, 100%);
+  width: auto;
+  max-width: min(920px, 100%);
+  height: auto;
   margin: 0 auto;
   display: block;
   object-fit: contain;

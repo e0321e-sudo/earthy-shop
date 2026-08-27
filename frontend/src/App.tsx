@@ -74,6 +74,7 @@ const FREE_DELIVERY_MIN_AMOUNT = 30000;
 const BASE_DELIVERY_FEE = 2500;
 const REMOTE_AREA_DELIVERY_FEE = 2000;
 const PHONE_PREFIXES = ["010", "011", "016", "017", "018", "019"];
+const EMAIL_FIND_PHONE_PATTERN = /^[0-9]{3}-[0-9]{4}-[0-9]{4}$/;
 const DELIVERY_MEMO_OPTIONS = [
   "배송 전에 미리 연락바랍니다.",
   "부재 시 경비실에 맡겨주세요.",
@@ -4751,7 +4752,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
         return;
       }
 
-      if (!/^[0-9]{3}-[0-9]{4}-[0-9]{4}$/.test(emailFindForm.phone)) {
+      if (!EMAIL_FIND_PHONE_PATTERN.test(emailFindForm.phone)) {
         setError("연락처 형식을 확인해주세요.");
         return;
       }
@@ -4861,7 +4862,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
               <input
                 type="tel"
                 value={emailFindForm.phone}
-                placeholder="010-0000-0000"
+                placeholder="000-0000-0000"
                 inputMode="numeric"
                 maxLength={13}
                 onChange={(event) => updateEmailFindPhone(event.target.value)}

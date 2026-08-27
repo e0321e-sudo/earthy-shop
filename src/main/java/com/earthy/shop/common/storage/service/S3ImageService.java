@@ -39,7 +39,8 @@ import java.util.UUID;
 public class S3ImageService {
 
     private static final long MAX_IMAGE_SIZE = 10L * 1024 * 1024;
-    private static final int MAX_LONG_EDGE = 1800;
+    private static final ImageResizePolicy MAIN_IMAGE_POLICY = new ImageResizePolicy(ResizeMode.LONG_EDGE, 1800);
+    private static final ImageResizePolicy DETAIL_IMAGE_POLICY = new ImageResizePolicy(ResizeMode.WIDTH, 1400);
     private static final int MAX_PIXELS = 40_000_000;
     private static final float JPEG_QUALITY = 0.85f;
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
@@ -73,12 +74,12 @@ public class S3ImageService {
 
     // 상품 대표 이미지 업로드
     public String uploadProductImage(MultipartFile file) {
-        return upload(file, "products/main");
+        return upload(file, "products/main", MAIN_IMAGE_POLICY);
     }
 
     // 상품 상세 이미지 업로드
     public String uploadProductDetailImage(MultipartFile file) {
-        return upload(file, "products/details");
+        return upload(file, "products/details", DETAIL_IMAGE_POLICY);
     }
 
     // EARTHY가 업로드한 상품 이미지만 안전하게 삭제
@@ -111,7 +112,7 @@ public class S3ImageService {
     }
 
     // S3 업로드 후 고객/관리자 화면에서 사용할 공개 URL 반환
-    private String upload(MultipartFile file, String directory) {
+    private String upload(MultipartFile file, String directory, ImageResizePolicy resizePolicy) {
         validateImageFile(file);
 
         S3Client s3Client = s3ClientProvider.getIfAvailable();
@@ -120,7 +121,7 @@ public class S3ImageService {
             throw new BusinessException(ErrorCode.IMAGE_CONFIG_NOT_FOUND);
         }
 
-        OptimizedImage optimizedImage = optimizeImage(file);
+        OptimizedImage optimizedImage = optimizeImage(file, resizePolicy);
         String key = directory + "/" + UUID.randomUUID() + optimizedImage.extension();
 
         PutObjectRequest request = PutObjectRequest.builder()
@@ -143,7 +144,7 @@ public class S3ImageService {
     }
 
     // 원본은 저장하지 않고 웹 표시용 이미지로 리사이즈/압축한 결과만 S3에 저장
-    private OptimizedImage optimizeImage(MultipartFile file) {
+    private OptimizedImage optimizeImage(MultipartFile file, ImageResizePolicy resizePolicy) {
         try (ImageInputStream imageInputStream = ImageIO.createImageInputStream(file.getInputStream())) {
             if (imageInputStream == null) {
                 throw new IOException("Image input stream could not be created.");
@@ -173,7 +174,7 @@ public class S3ImageService {
                     throw new IOException("Image could not be decoded.");
                 }
 
-                BufferedImage optimizedImage = resizeAndNormalize(originalImage);
+                BufferedImage optimizedImage = resizeAndNormalize(originalImage, resizePolicy);
                 boolean hasAlpha = optimizedImage.getColorModel().hasAlpha();
                 String outputFormat = hasAlpha ? "png" : "jpeg";
                 byte[] bytes = writeImage(optimizedImage, outputFormat);
@@ -194,11 +195,10 @@ public class S3ImageService {
         }
     }
 
-    private BufferedImage resizeAndNormalize(BufferedImage source) {
+    private BufferedImage resizeAndNormalize(BufferedImage source, ImageResizePolicy resizePolicy) {
         int width = source.getWidth();
         int height = source.getHeight();
-        int longEdge = Math.max(width, height);
-        double scale = longEdge > MAX_LONG_EDGE ? (double) MAX_LONG_EDGE / longEdge : 1.0;
+        double scale = calculateResizeScale(width, height, resizePolicy);
         int targetWidth = Math.max(1, (int) Math.round(width * scale));
         int targetHeight = Math.max(1, (int) Math.round(height * scale));
         boolean hasAlpha = source.getColorModel().hasAlpha();
@@ -223,6 +223,15 @@ public class S3ImageService {
         }
 
         return target;
+    }
+
+    private double calculateResizeScale(int width, int height, ImageResizePolicy resizePolicy) {
+        if (resizePolicy.mode() == ResizeMode.WIDTH) {
+            return width > resizePolicy.maxSize() ? (double) resizePolicy.maxSize() / width : 1.0;
+        }
+
+        int longEdge = Math.max(width, height);
+        return longEdge > resizePolicy.maxSize() ? (double) resizePolicy.maxSize() / longEdge : 1.0;
     }
 
     private byte[] writeImage(BufferedImage image, String formatName) throws IOException {
@@ -312,5 +321,13 @@ public class S3ImageService {
     }
 
     private record OptimizedImage(byte[] bytes, String extension, String contentType) {
+    }
+
+    private record ImageResizePolicy(ResizeMode mode, int maxSize) {
+    }
+
+    private enum ResizeMode {
+        LONG_EDGE,
+        WIDTH
     }
 }
