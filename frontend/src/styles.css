@@ -2112,6 +2112,12 @@ main {
   font-weight: 400;
 }
 
+.email-find-result-list strong span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 .email-find-modal div {
   display: grid;
   justify-content: center;

@@ -37,7 +37,7 @@ public record MemberEmailFindResponseDto(
                     : member.getProvider();
 
             return new Account(
-                    member.getEmail(),
+                    maskEmail(member.getEmail()),
                     provider,
                     provider.getDescription()
             );
@@ -50,10 +50,30 @@ public record MemberEmailFindResponseDto(
                 : member.getProvider();
 
         return new MemberEmailFindResponseDto(
-                member.getEmail(),
+                maskEmail(member.getEmail()),
                 provider,
                 provider.getDescription(),
                 List.of(Account.from(member))
         );
+    }
+
+    private static String maskEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "";
+        }
+
+        int atIndex = email.indexOf("@");
+
+        if (atIndex <= 0) {
+            return email;
+        }
+
+        String localPart = email.substring(0, atIndex);
+        String domain = email.substring(atIndex);
+        String visiblePrefix = localPart.length() <= 2
+                ? localPart.substring(0, 1)
+                : localPart.substring(0, 2);
+
+        return visiblePrefix + "***" + domain;
     }
 }

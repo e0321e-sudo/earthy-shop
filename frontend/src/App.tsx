@@ -171,10 +171,26 @@ type PaymentResultState =
 
 type CustomerRoute = {
   page: Page;
+  authMode?: AuthMode;
   category?: ProductCategory;
   productId?: number;
   productPage?: number;
   productSort?: ProductSort;
+};
+
+const AUTH_MODE_PATHS: Record<AuthMode, string> = {
+  login: "/login",
+  signup: "/signup",
+  findEmail: "/find-email",
+  findPassword: "/find-password",
+};
+
+const AUTH_PATH_MODES: Record<string, AuthMode> = {
+  "/auth": "login",
+  "/login": "login",
+  "/signup": "signup",
+  "/find-email": "findEmail",
+  "/find-password": "findPassword",
 };
 
 const CATEGORY_ROUTE_SEGMENTS: Record<ProductCategory, string> = {
@@ -271,8 +287,10 @@ function readCustomerRouteFromLocation(): CustomerRoute {
     return { page: "mypage" };
   }
 
-  if (path === "/auth") {
-    return { page: "auth" };
+  const authMode = AUTH_PATH_MODES[path];
+
+  if (authMode) {
+    return { page: "auth", authMode };
   }
 
   return { page: "home" };
@@ -330,7 +348,7 @@ function createCustomerRouteUrl(route: CustomerRoute) {
   }
 
   if (route.page === "auth") {
-    return "/auth";
+    return AUTH_MODE_PATHS[route.authMode ?? "login"];
   }
 
   return "/";
@@ -434,11 +452,29 @@ interface MyPageProps {
 }
 
 interface AuthPageProps {
+  initialMode: AuthMode;
+  onModeChange: (mode: AuthMode) => void;
   onLoginSuccess: (loginResponse: LoginResponse) => void;
 }
 
 // 금액 표기
 const formatWon = (value: number) => `${value.toLocaleString("ko-KR")}원`;
+
+const formatEmailFindProviderLabel = (provider: EmailFindAccount["provider"]) => (
+  provider === "KAKAO" ? "카카오" : "일반"
+);
+
+const maskEmailAddress = (email: string) => {
+  const [localPart, domain] = email.split("@");
+
+  if (!localPart || !domain || localPart.includes("*")) {
+    return email;
+  }
+
+  const visiblePrefix = localPart.length <= 2 ? localPart.slice(0, 1) : localPart.slice(0, 2);
+
+  return `${visiblePrefix}***@${domain}`;
+};
 
 const preventProtectedImageContextMenu = (event: MouseEvent<HTMLImageElement>) => {
   event.preventDefault();
@@ -758,6 +794,7 @@ function App() {
 
   // 인증/마이페이지 상태
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem("earthyAccessToken"));
+  const [authMode, setAuthMode] = useState<AuthMode>(initialRoute.authMode ?? "login");
   const [authPageKey, setAuthPageKey] = useState(0);
   const [myPageKey, setMyPageKey] = useState(0);
   const [myPageInitialView, setMyPageInitialView] = useState<MyPageView>("home");
@@ -785,6 +822,10 @@ function App() {
 
   const applyCustomerRoute = (route: CustomerRoute) => {
     setPage(route.page);
+
+    if (route.page === "auth") {
+      setAuthMode(route.authMode ?? "login");
+    }
 
     if (route.page === "shop") {
       setCategory(route.category ?? "ALL");
@@ -1323,7 +1364,7 @@ function App() {
     }
 
     setAuthPageKey((key) => key + 1);
-    navigateCustomerRoute({ page: "auth" });
+    navigateCustomerRoute({ page: "auth", authMode: "login" });
     return false;
   };
 
@@ -1413,7 +1454,7 @@ function App() {
     }
 
     setAuthPageKey((key) => key + 1);
-    navigateCustomerRoute({ page: "auth" });
+    navigateCustomerRoute({ page: "auth", authMode: "login" });
   };
 
   // 장바구니 화면 이동
@@ -1589,6 +1630,8 @@ function App() {
         {page === "auth" && (
           <AuthPage
             key={authPageKey}
+            initialMode={authMode}
+            onModeChange={(nextMode) => navigateCustomerRoute({ page: "auth", authMode: nextMode })}
             onLoginSuccess={(loginResponse) => {
               localStorage.setItem("earthyAccessToken", loginResponse.accessToken);
               localStorage.setItem("earthyRefreshToken", loginResponse.refreshToken);
@@ -4542,8 +4585,8 @@ function CustomerToast({ message, onClose }: { message: string; onClose: () => v
   );
 }
 
-function AuthPage({ onLoginSuccess }: AuthPageProps) {
-  const [mode, setMode] = useState<AuthMode>("login");
+function AuthPage({ initialMode, onModeChange, onLoginSuccess }: AuthPageProps) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [signupCompleted, setSignupCompleted] = useState(
     () =>
       import.meta.env.DEV &&
@@ -4582,6 +4625,14 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   });
 
   const allAgreed = agreements.terms && agreements.privacy && agreements.marketing;
+
+  useEffect(() => {
+    setMode(initialMode);
+    setMessage(null);
+    setEmailFindResults([]);
+    setSocialPasswordFindOpen(false);
+    setError(null);
+  }, [initialMode]);
 
   useEffect(() => {
     if (!serviceTermsOpen && !privacyTermsOpen && !marketingTermsOpen) {
@@ -4634,6 +4685,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
     setEmailFindResults([]);
     setSocialPasswordFindOpen(false);
     setError(null);
+    onModeChange(nextMode);
   };
 
   const updateAllAgreements = (checked: boolean) => {
@@ -4815,11 +4867,7 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
   const moveToLogin = () => {
     setSignupCompleted(false);
     setCompletedMemberName("");
-    setMode("login");
-    setMessage(null);
-    setEmailFindResults([]);
-    setSocialPasswordFindOpen(false);
-    setError(null);
+    moveAuthMode("login");
   };
 
   if (signupCompleted) {
@@ -4885,12 +4933,20 @@ function AuthPage({ onLoginSuccess }: AuthPageProps) {
         {emailFindResults.length > 0 && (
           <div className="email-find-modal-backdrop" role="presentation">
             <section className="email-find-modal" role="dialog" aria-modal="true">
-              <p>가입된 이메일</p>
+              <p>
+                {emailFindResults.length === 1
+                  ? "가입된 이메일"
+                  : `가입된 계정이 ${emailFindResults.length}개 있습니다.`}
+              </p>
               <ul className="email-find-result-list">
                 {emailFindResults.map((account) => (
                   <li key={`${account.provider}-${account.email}`}>
-                    <strong>{account.email}</strong>
-                    <span>{account.providerDescription}</span>
+                    <strong>
+                      {maskEmailAddress(account.email)}
+                      {emailFindResults.length >= 2 && (
+                        <span> ({formatEmailFindProviderLabel(account.provider)})</span>
+                      )}
+                    </strong>
                   </li>
                 ))}
               </ul>
