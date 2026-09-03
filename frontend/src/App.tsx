@@ -1537,7 +1537,12 @@ function App() {
       />
 
       <main>
-        {page === "home" && <Home onHome={goHome} />}
+        {page === "home" && (
+          <Home
+            onShop={() => openCategory("ALL")}
+            onAbout={() => navigateCustomerRoute({ page: "about" })}
+          />
+        )}
         {page === "shop" && (
           <Shop
             category={category}
@@ -1712,7 +1717,7 @@ function Header({
   };
 
   return (
-    <header className="site-header">
+    <header className={`site-header ${page === "home" ? "is-home-header" : ""}`}>
       <button
         className="menu-button"
         type="button"
@@ -1754,7 +1759,7 @@ function Header({
               </button>
             ))}
           <button className={page === "about" ? "is-active" : ""} type="button" onClick={handleAbout}>
-            ABOUT
+            ABOUT US
           </button>
           {categoryTabs
             .filter((tab) => tab.value === "POSTCARD" || tab.value === "POSTER")
@@ -1858,12 +1863,66 @@ function CartNotice({
   );
 }
 
-function Home({ onHome }: { onHome: () => void }) {
+function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) {
   return (
     <section className="home-view">
-      <button className="home-photo" type="button" onClick={onHome} aria-label="홈으로 이동">
-        <img {...protectedImageProps()} src="/assets/field-postcard.jpeg" alt="풀 언덕 풍경 엽서" />
-      </button>
+      <section className="home-hero" aria-label="EARTHY 메인">
+        <img {...protectedImageProps()} src="/assets/about-panorama/panorama-09.jpeg" alt="바람이 지나는 언덕" />
+        <div className="home-hero-content">
+          <h1>
+            Moments,
+            <br />
+            remembered.
+          </h1>
+          <button type="button" onClick={onShop}>
+            상품 보러가기
+          </button>
+        </div>
+      </section>
+
+      <section className="home-day-section">
+        <div className="home-day-copy">
+          <h2>Pieces of a day</h2>
+          <p>
+            그날의 빛과 공기,
+            <br />
+            스쳐 지나간 바람까지.
+            <br />
+            어떤 순간은 하루가 지나도
+            <br />
+            오래 마음에 남습니다.
+          </p>
+          <button type="button" onClick={onAbout}>
+            ABOUT US →
+          </button>
+        </div>
+
+        <img {...protectedImageProps()} src="/assets/about-panorama/panorama-10.jpeg" alt="빛을 머금은 꽃" />
+
+        <div className="home-day-notes">
+          <p>
+            <strong>Quiet days</strong>
+            <span>for slow, ordinary moments</span>
+          </p>
+          <p>
+            <strong>Passing light</strong>
+            <span>the light that stayed with us</span>
+          </p>
+          <p>
+            <strong>Soft memories</strong>
+            <span>the moments we keep close</span>
+          </p>
+        </div>
+      </section>
+
+      <section className="home-forest-section">
+        <img {...protectedImageProps()} src="/assets/products/forest-walk.jpeg" alt="숲길에 남은 오후의 빛" />
+        <h2>
+          Some days return to us in the
+          <br />
+          light, the air, and the wind.
+        </h2>
+      </section>
     </section>
   );
 }
