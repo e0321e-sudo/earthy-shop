@@ -9,6 +9,9 @@
   --line: #d7d2c7;
   --display-font: "Imbue", Georgia, "Times New Roman", serif;
   --body-font: "Inter", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --home-cream: #fffaf0;
+  --home-brown: #5a3b22;
+  --home-peach: #f2b987;
 
   color: var(--ink);
   background: var(--paper);
@@ -102,8 +105,8 @@ button {
   display: block;
   color: #fff;
   font-family: var(--display-font);
-  font-size: 28px;
-  font-weight: 400;
+  font-size: 27px;
+  font-weight: 300;
   line-height: 1;
 }
 
@@ -408,7 +411,7 @@ main {
   min-height: clamp(520px, 56.2vw, 760px);
   place-items: center;
   overflow: hidden;
-  color: #fff;
+  color: var(--home-cream);
 }
 
 .home-hero::after,
@@ -416,8 +419,13 @@ main {
   position: absolute;
   inset: 0;
   content: "";
-  background: rgb(0 0 0 / 30%);
   pointer-events: none;
+}
+
+.home-hero::after {
+  background:
+    linear-gradient(180deg, rgb(44 28 13 / 16%), rgb(31 20 10 / 20%)),
+    rgb(84 48 18 / 12%);
 }
 
 .home-hero img,
@@ -432,7 +440,7 @@ main {
 .home-hero img {
   position: absolute;
   inset: 0;
-  filter: saturate(0.76) contrast(0.96) brightness(0.74);
+  filter: sepia(0.11) saturate(0.9) contrast(0.94) brightness(0.86);
 }
 
 .home-hero-content {
@@ -451,13 +459,14 @@ main {
 .home-forest-section h2 {
   margin: 0;
   font-family: var(--display-font);
-  font-weight: 400;
+  font-weight: 300;
   letter-spacing: 0;
+  font-optical-sizing: auto;
 }
 
 .home-hero-content h1 {
-  font-size: clamp(94px, 14vw, 186px);
-  line-height: 0.84;
+  font-size: clamp(92px, 13.8vw, 182px);
+  line-height: 0.83;
 }
 
 .home-hero-content button,
@@ -491,8 +500,8 @@ main {
   gap: clamp(34px, 4.4vw, 54px);
   min-height: clamp(520px, 56.2vw, 760px);
   padding: clamp(62px, 6.8vw, 86px) clamp(28px, 3.3vw, 54px) clamp(26px, 3vw, 38px);
-  background: #efb17f;
-  color: #fff;
+  background: var(--home-peach);
+  color: var(--home-cream);
 }
 
 .home-day-main {
@@ -509,8 +518,8 @@ main {
 }
 
 .home-day-copy h2 {
-  font-size: clamp(46px, 4.8vw, 76px);
-  line-height: 0.9;
+  font-size: clamp(47px, 4.9vw, 78px);
+  line-height: 0.88;
 }
 
 .home-day-copy p {
@@ -532,7 +541,7 @@ main {
   align-self: start;
   min-height: 0;
   object-fit: cover;
-  filter: saturate(0.82) contrast(0.96);
+  filter: sepia(0.06) saturate(0.92) contrast(0.96) brightness(1.04);
 }
 
 .home-day-notes {
@@ -553,7 +562,7 @@ main {
 
 .home-day-notes strong {
   font-size: clamp(26px, 2.5vw, 38px);
-  line-height: 0.96;
+  line-height: 0.92;
 }
 
 .home-day-notes span {
@@ -566,11 +575,17 @@ main {
   position: relative;
   min-height: clamp(520px, 56.2vw, 760px);
   overflow: hidden;
-  color: #fff;
+  color: var(--home-cream);
 }
 
 .home-forest-section::after {
-  background: linear-gradient(90deg, rgb(0 0 0 / 56%), rgb(0 0 0 / 22%) 56%, rgb(0 0 0 / 10%));
+  background:
+    linear-gradient(90deg, rgb(11 9 5 / 46%), rgb(15 12 7 / 18%) 58%, rgb(16 12 7 / 8%)),
+    rgb(75 48 23 / 10%);
+}
+
+.home-forest-section img {
+  filter: sepia(0.05) saturate(0.9) contrast(0.96) brightness(1.08);
 }
 
 .home-forest-section h2 {
@@ -579,8 +594,38 @@ main {
   top: clamp(52px, 6.8vw, 90px);
   left: clamp(28px, 4.4vw, 58px);
   max-width: 900px;
-  font-size: clamp(44px, 5.2vw, 82px);
+  font-size: clamp(43px, 5vw, 78px);
   line-height: 0.96;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .home-day-copy h2,
+  .home-day-copy p,
+  .home-day-copy button,
+  .home-day-main > img,
+  .home-day-notes p,
+  .home-forest-section h2 {
+    transition:
+      transform 460ms ease,
+      filter 460ms ease,
+      opacity 460ms ease,
+      box-shadow 460ms ease;
+    will-change: transform;
+  }
+
+  .home-day-copy h2:hover,
+  .home-day-copy p:hover,
+  .home-day-copy button:hover,
+  .home-day-notes p:hover,
+  .home-forest-section h2:hover {
+    transform: translateY(-5px);
+  }
+
+  .home-day-main > img:hover {
+    transform: translateY(-7px);
+    filter: sepia(0.06) saturate(0.96) contrast(0.98) brightness(1.06);
+    box-shadow: 0 18px 34px rgb(78 49 28 / 14%);
+  }
 }
 
 .page-view {
@@ -1550,6 +1595,25 @@ main {
 @media (prefers-reduced-motion: reduce) {
   .about-archive-track {
     animation: none;
+  }
+
+  .home-day-copy h2,
+  .home-day-copy p,
+  .home-day-copy button,
+  .home-day-main > img,
+  .home-day-notes p,
+  .home-forest-section h2 {
+    transition: none;
+    will-change: auto;
+  }
+
+  .home-day-copy h2:hover,
+  .home-day-copy p:hover,
+  .home-day-copy button:hover,
+  .home-day-main > img:hover,
+  .home-day-notes p:hover,
+  .home-forest-section h2:hover {
+    transform: none;
   }
 }
 
@@ -2881,8 +2945,8 @@ main {
   min-height: clamp(520px, 58vw, 720px);
   padding: clamp(210px, 18vw, 310px) clamp(24px, 3vw, 42px) 64px;
   border-top: 0;
-  background: #fff;
-  color: #5a402a;
+  background: #fffdf8;
+  color: var(--home-brown);
   text-align: left;
 }
 
@@ -2893,10 +2957,11 @@ main {
 .home-footer-inner h2 {
   margin: 0 0 24px;
   font-family: var(--display-font);
-  font-size: clamp(52px, 5.3vw, 82px);
-  font-weight: 400;
-  line-height: 0.88;
+  font-size: clamp(50px, 5.1vw, 78px);
+  font-weight: 300;
+  line-height: 0.86;
   letter-spacing: 0;
+  font-optical-sizing: auto;
 }
 
 .home-footer-links {
@@ -2906,7 +2971,7 @@ main {
 }
 
 .home-footer-links a {
-  color: #5a402a;
+  color: var(--home-brown);
 }
 
 .home-footer-links svg {
