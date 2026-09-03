@@ -1654,7 +1654,7 @@ function App() {
         />
       )}
 
-      <BusinessFooter />
+      <BusinessFooter variant={page === "home" ? "home" : "default"} />
     </>
   );
 }
@@ -1798,7 +1798,11 @@ function Header({
       </nav>
 
       <button className="brand-button" type="button" onClick={handleHome} aria-label="EARTHY home">
-        <img src="/assets/earthy-logo-transparent.png" alt="EARTHY" />
+        {page === "home" ? (
+          <span className="home-brand-text">EARTHY</span>
+        ) : (
+          <img src="/assets/earthy-logo-transparent.png" alt="EARTHY" />
+        )}
       </button>
 
       <div className="header-actions">
@@ -1881,23 +1885,25 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
       </section>
 
       <section className="home-day-section">
-        <div className="home-day-copy">
-          <h2>Pieces of a day</h2>
-          <p>
-            그날의 빛과 공기,
-            <br />
-            스쳐 지나간 바람까지.
-            <br />
-            어떤 순간은 하루가 지나도
-            <br />
-            오래 마음에 남습니다.
-          </p>
-          <button type="button" onClick={onAbout}>
-            ABOUT US →
-          </button>
-        </div>
+        <div className="home-day-main">
+          <div className="home-day-copy">
+            <h2>Pieces of a day</h2>
+            <p>
+              그날의 빛과 공기,
+              <br />
+              스쳐 지나간 바람까지.
+              <br />
+              어떤 순간은 하루가 지나도
+              <br />
+              오래 마음에 남습니다.
+            </p>
+            <button type="button" onClick={onAbout}>
+              ABOUT US →
+            </button>
+          </div>
 
-        <img {...protectedImageProps()} src="/assets/about-panorama/panorama-10.jpeg" alt="빛을 머금은 꽃" />
+          <img {...protectedImageProps()} src="/assets/about-panorama/panorama-10.jpeg" alt="빛을 머금은 꽃" />
+        </div>
 
         <div className="home-day-notes">
           <p>
@@ -5392,29 +5398,56 @@ function About() {
   );
 }
 
-function BusinessFooter() {
+function FooterLinks({ className = "business-footer-links" }: { className?: string }) {
+  return (
+    <div className={className} aria-label="소셜 및 문의 링크">
+      <a
+        href="https://www.instagram.com/earthy_official_?igsi=MWVocndobmN0ajQxMA=="
+        target="_blank"
+        rel="noreferrer"
+        aria-label="EARTHY 인스타그램 새 탭으로 열기"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" rx="5" />
+          <circle cx="12" cy="12" r="3.4" />
+          <circle cx="16.5" cy="7.5" r="0.8" />
+        </svg>
+      </a>
+      <a href="mailto:earthy9194@gmail.com" aria-label="EARTHY 이메일 보내기">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="6" width="16" height="12" rx="1.5" />
+          <path d="m5 7 7 6 7-6" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
+function BusinessFooter({ variant = "default" }: { variant?: "default" | "home" }) {
+  if (variant === "home") {
+    return (
+      <footer className="business-footer home-business-footer">
+        <div className="home-footer-inner">
+          <h2>EARTHY STUDIO</h2>
+          <FooterLinks className="business-footer-links home-footer-links" />
+          <dl className="home-footer-info">
+            <div>
+              <dt>BUSINESS NO</dt>
+              <dd>877-05-02984</dd>
+            </div>
+            <div>
+              <dt>E-MAIL</dt>
+              <dd>earthy9194@gmail.com</dd>
+            </div>
+          </dl>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="business-footer">
-      <div className="business-footer-links" aria-label="소셜 및 문의 링크">
-        <a
-          href="https://www.instagram.com/earthy_official_?igsi=MWVocndobmN0ajQxMA=="
-          target="_blank"
-          rel="noreferrer"
-          aria-label="EARTHY 인스타그램 새 탭으로 열기"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="4" width="16" height="16" rx="5" />
-            <circle cx="12" cy="12" r="3.4" />
-            <circle cx="16.5" cy="7.5" r="0.8" />
-          </svg>
-        </a>
-        <a href="mailto:earthy9194@gmail.com" aria-label="EARTHY 이메일 보내기">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="4" y="6" width="16" height="12" rx="1.5" />
-            <path d="m5 7 7 6 7-6" />
-          </svg>
-        </a>
-      </div>
+      <FooterLinks />
       <p>
         <span>
           <span className="business-footer-label">COMPANY</span> EARTHY STUDIO

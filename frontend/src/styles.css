@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Imbue:opsz,wght@10..100,100..900&family=Inter:wght@400;500;600;700;800&display=swap");
+
 :root {
   --paper: #f7f6f2;
   --ink: #15130f;
@@ -5,10 +7,12 @@
   --moss: rgba(45, 101, 54, 0.82);
   --clay: #9b3f2f;
   --line: #d7d2c7;
+  --display-font: "Imbue", Georgia, "Times New Roman", serif;
+  --body-font: "Inter", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
 
   color: var(--ink);
   background: var(--paper);
-  font-family: Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  font-family: var(--body-font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -72,10 +76,6 @@ button {
   color: var(--ink);
 }
 
-.site-header.is-home-header .brand-button img {
-  filter: brightness(0) invert(1);
-}
-
 .site-header.is-home-header .menu-button span {
   background: #fff;
 }
@@ -96,6 +96,15 @@ button {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.home-brand-text {
+  display: block;
+  color: #fff;
+  font-family: var(--display-font);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1;
 }
 
 .main-nav {
@@ -412,7 +421,7 @@ main {
 }
 
 .home-hero img,
-.home-day-section > img,
+.home-day-main > img,
 .home-forest-section img {
   display: block;
   width: 100%;
@@ -431,8 +440,8 @@ main {
   z-index: 1;
   display: grid;
   justify-items: center;
-  gap: clamp(22px, 2.2vw, 30px);
-  padding: 118px 24px 52px;
+  gap: clamp(24px, 2.4vw, 34px);
+  padding: 132px 24px 54px;
   text-align: center;
 }
 
@@ -441,14 +450,14 @@ main {
 .home-day-notes strong,
 .home-forest-section h2 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--display-font);
   font-weight: 400;
   letter-spacing: 0;
 }
 
 .home-hero-content h1 {
-  font-size: clamp(82px, 10.5vw, 154px);
-  line-height: 0.95;
+  font-size: clamp(94px, 14vw, 186px);
+  line-height: 0.84;
 }
 
 .home-hero-content button,
@@ -460,6 +469,7 @@ main {
   border-radius: 999px;
   background: transparent;
   color: inherit;
+  font-family: var(--body-font);
   font-size: 15px;
   font-weight: 800;
   cursor: pointer;
@@ -478,45 +488,61 @@ main {
 
 .home-day-section {
   display: grid;
-  grid-template-columns: minmax(260px, 0.72fr) minmax(420px, 1fr);
-  gap: clamp(70px, 13vw, 220px);
-  align-items: center;
+  gap: clamp(34px, 4.4vw, 54px);
   min-height: clamp(520px, 56.2vw, 760px);
-  padding: clamp(60px, 6.8vw, 86px) clamp(28px, 3.4vw, 56px) 34px;
+  padding: clamp(62px, 6.8vw, 86px) clamp(28px, 3.3vw, 54px) clamp(26px, 3vw, 38px);
   background: #efb17f;
   color: #fff;
 }
 
-.home-day-copy {
+.home-day-main {
   display: grid;
-  gap: clamp(38px, 4.6vw, 60px);
-  align-content: center;
+  grid-template-columns: minmax(260px, 0.84fr) minmax(420px, 1fr);
+  gap: clamp(76px, 13.2vw, 214px);
+  align-items: start;
+  width: min(100%, 1384px);
+  margin: 0 auto;
+}
+
+.home-day-copy {
+  display: block;
 }
 
 .home-day-copy h2 {
-  font-size: clamp(42px, 4.4vw, 68px);
-  line-height: 0.96;
+  font-size: clamp(46px, 4.8vw, 76px);
+  line-height: 0.9;
 }
 
 .home-day-copy p {
-  margin: 0;
+  margin: clamp(48px, 5vw, 66px) 0 0;
+  font-family: var(--body-font);
   font-size: 17px;
   font-weight: 700;
   line-height: 1.72;
 }
 
-.home-day-section > img {
+.home-day-copy button {
+  margin-top: clamp(34px, 3.8vw, 48px);
+}
+
+.home-day-main > img {
+  width: 100%;
+  height: auto;
   aspect-ratio: 1.28 / 1;
-  min-height: 390px;
+  align-self: start;
+  min-height: 0;
+  object-fit: cover;
   filter: saturate(0.82) contrast(0.96);
 }
 
 .home-day-notes {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 36px;
-  padding: clamp(30px, 4vw, 46px) clamp(22px, 2.8vw, 40px) 0;
+  gap: clamp(28px, 4vw, 56px);
+  align-items: end;
+  width: min(100%, 1384px);
+  margin: 0 auto;
+  padding: clamp(22px, 3.2vw, 38px) clamp(20px, 2.2vw, 30px) 0;
 }
 
 .home-day-notes p {
@@ -531,6 +557,7 @@ main {
 }
 
 .home-day-notes span {
+  font-family: var(--body-font);
   font-size: 14px;
   font-weight: 700;
 }
@@ -552,8 +579,8 @@ main {
   top: clamp(52px, 6.8vw, 90px);
   left: clamp(28px, 4.4vw, 58px);
   max-width: 900px;
-  font-size: clamp(40px, 4.6vw, 70px);
-  line-height: 1.05;
+  font-size: clamp(44px, 5.2vw, 82px);
+  line-height: 0.96;
 }
 
 .page-view {
@@ -2849,6 +2876,70 @@ main {
   font-weight: 700;
 }
 
+.home-business-footer {
+  display: block;
+  min-height: clamp(520px, 58vw, 720px);
+  padding: clamp(210px, 18vw, 310px) clamp(24px, 3vw, 42px) 64px;
+  border-top: 0;
+  background: #fff;
+  color: #5a402a;
+  text-align: left;
+}
+
+.home-footer-inner {
+  width: min(100%, 520px);
+}
+
+.home-footer-inner h2 {
+  margin: 0 0 24px;
+  font-family: var(--display-font);
+  font-size: clamp(52px, 5.3vw, 82px);
+  font-weight: 400;
+  line-height: 0.88;
+  letter-spacing: 0;
+}
+
+.home-footer-links {
+  justify-content: flex-start;
+  gap: 18px;
+  margin: 0 0 48px;
+}
+
+.home-footer-links a {
+  color: #5a402a;
+}
+
+.home-footer-links svg {
+  width: clamp(24px, 1.9vw, 30px);
+  height: clamp(24px, 1.9vw, 30px);
+}
+
+.home-footer-info {
+  display: grid;
+  gap: 28px;
+  margin: 0;
+  font-family: var(--body-font);
+}
+
+.home-footer-info div {
+  display: grid;
+  gap: 6px;
+}
+
+.home-footer-info dt {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.home-footer-info dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .board-view {
   display: grid;
   gap: 24px;
@@ -3497,10 +3588,14 @@ main {
   }
 
   .home-day-section {
-    grid-template-columns: 1fr;
     gap: 42px;
     min-height: 0;
     padding: 58px clamp(22px, 6vw, 44px) 34px;
+  }
+
+  .home-day-main {
+    grid-template-columns: 1fr;
+    gap: 42px;
   }
 
   .home-day-copy {
@@ -3515,7 +3610,7 @@ main {
     font-size: 15px;
   }
 
-  .home-day-section > img {
+  .home-day-main > img {
     min-height: 0;
     aspect-ratio: 1.16 / 1;
   }
@@ -3534,6 +3629,20 @@ main {
     top: 44px;
     max-width: calc(100% - 44px);
     font-size: clamp(38px, 11vw, 60px);
+  }
+
+  .home-business-footer {
+    min-height: 500px;
+    padding: 168px clamp(22px, 6vw, 44px) 58px;
+  }
+
+  .home-footer-inner h2 {
+    margin-bottom: 22px;
+    font-size: clamp(48px, 13vw, 68px);
+  }
+
+  .home-footer-links {
+    margin-bottom: 42px;
   }
 
   .detail-layout,
@@ -3681,7 +3790,7 @@ main {
     padding-top: 52px;
   }
 
-  .home-day-section > img {
+  .home-day-main > img {
     aspect-ratio: 1 / 1;
   }
 
@@ -3691,6 +3800,15 @@ main {
 
   .home-forest-section {
     min-height: 500px;
+  }
+
+  .home-business-footer {
+    min-height: 470px;
+    padding-top: 150px;
+  }
+
+  .home-footer-info {
+    gap: 24px;
   }
 
   .order-list-actions {
