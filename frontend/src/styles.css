@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Imbue:opsz,wght@10..100,100..900&family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Imbue:opsz,wght@10..100,100..900&family=Inter:wght@300;400;500;600;700;800&display=swap");
 
 :root {
   --paper: #f7f6f2;
@@ -12,6 +12,7 @@
   --home-cream: #fffaf0;
   --home-brown: #5a3b22;
   --home-peach: #f2b987;
+  --home-section-height: clamp(520px, 56.2vw, 760px);
 
   color: var(--ink);
   background: var(--paper);
@@ -106,7 +107,7 @@ button {
   color: #fff;
   font-family: var(--display-font);
   font-size: 27px;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -407,7 +408,7 @@ main {
 .home-hero {
   position: relative;
   display: grid;
-  min-height: clamp(520px, 56.2vw, 760px);
+  min-height: var(--home-section-height);
   place-items: center;
   overflow: hidden;
   color: var(--home-cream);
@@ -415,7 +416,18 @@ main {
 
 .home-hero::after,
 .home-forest-section::after {
-  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  content: "";
+  pointer-events: none;
+}
+
+.home-hero::after {
+  background:
+    linear-gradient(180deg, rgb(38 25 13 / 14%), rgb(24 15 8 / 24%)),
+    rgb(77 43 18 / 14%);
 }
 
 .home-hero img,
@@ -430,11 +442,12 @@ main {
 .home-hero img {
   position: absolute;
   inset: 0;
+  filter: sepia(0.12) saturate(0.92) contrast(0.94) brightness(0.82);
 }
 
 .home-hero-content {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: grid;
   justify-items: center;
   gap: clamp(24px, 2.4vw, 34px);
@@ -448,7 +461,7 @@ main {
 .home-forest-section h2 {
   margin: 0;
   font-family: var(--display-font);
-  font-weight: 300;
+  font-weight: 400;
   letter-spacing: 0;
   font-optical-sizing: auto;
 }
@@ -474,8 +487,7 @@ main {
   cursor: pointer;
 }
 
-.home-hero-content button:hover,
-.home-day-copy button:hover {
+.home-hero-content button:hover {
   background: rgb(255 255 255 / 13%);
 }
 
@@ -488,7 +500,7 @@ main {
 .home-day-section {
   display: grid;
   gap: clamp(34px, 4.4vw, 54px);
-  min-height: clamp(520px, 56.2vw, 760px);
+  min-height: var(--home-section-height);
   padding: clamp(62px, 6.8vw, 86px) clamp(28px, 3.3vw, 54px) clamp(26px, 3vw, 38px);
   background: var(--home-peach);
   color: var(--home-cream);
@@ -516,7 +528,7 @@ main {
   margin: clamp(48px, 5vw, 66px) 0 0;
   font-family: var(--body-font);
   font-size: 17px;
-  font-weight: 400;
+  font-weight: 300;
   line-height: 1.72;
 }
 
@@ -531,6 +543,7 @@ main {
   align-self: start;
   min-height: 0;
   object-fit: cover;
+  filter: sepia(0.07) saturate(0.94) contrast(0.96) brightness(1.03);
 }
 
 .home-day-notes {
@@ -540,13 +553,21 @@ main {
   align-items: end;
   width: min(100%, 1384px);
   margin: 0 auto;
-  padding: clamp(22px, 3.2vw, 38px) clamp(20px, 2.2vw, 30px) 0;
+  padding: clamp(22px, 3.2vw, 38px) 0 0;
 }
 
 .home-day-notes p {
   display: grid;
   gap: 6px;
   margin: 0;
+}
+
+.home-day-notes p:nth-child(2) {
+  justify-self: center;
+}
+
+.home-day-notes p:nth-child(3) {
+  justify-self: end;
 }
 
 .home-day-notes strong {
@@ -562,14 +583,24 @@ main {
 
 .home-forest-section {
   position: relative;
-  min-height: clamp(520px, 56.2vw, 760px);
+  min-height: var(--home-section-height);
   overflow: hidden;
   color: var(--home-cream);
 }
 
+.home-forest-section::after {
+  background:
+    linear-gradient(90deg, rgb(6 5 3 / 54%), rgb(10 8 5 / 22%) 58%, rgb(10 8 5 / 8%)),
+    rgb(61 41 20 / 8%);
+}
+
+.home-forest-section img {
+  filter: sepia(0.04) saturate(0.94) contrast(0.98) brightness(1.03);
+}
+
 .home-forest-section h2 {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   top: clamp(52px, 6.8vw, 90px);
   left: clamp(28px, 4.4vw, 58px);
   max-width: 900px;
@@ -578,33 +609,19 @@ main {
   text-shadow: 0 2px 18px rgb(0 0 0 / 28%);
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .home-day-copy h2,
-  .home-day-copy p,
-  .home-day-copy button,
-  .home-day-main > img,
-  .home-day-notes p,
-  .home-forest-section h2 {
-    transition:
-      transform 460ms ease,
-      filter 460ms ease,
-      opacity 460ms ease,
-      box-shadow 460ms ease;
-    will-change: transform;
-  }
+.home-reveal-section {
+  opacity: 0;
+  transform: translateY(42px);
+  transition:
+    opacity 900ms ease,
+    transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
 
-  .home-day-copy h2:hover,
-  .home-day-copy p:hover,
-  .home-day-copy button:hover,
-  .home-day-notes p:hover,
-  .home-forest-section h2:hover {
-    transform: translateY(-5px);
-  }
-
-  .home-day-main > img:hover {
-    transform: translateY(-7px);
-    box-shadow: 0 18px 34px rgb(78 49 28 / 14%);
-  }
+.home-reveal-section.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  will-change: auto;
 }
 
 .page-view {
@@ -1575,23 +1592,11 @@ main {
     animation: none;
   }
 
-  .home-day-copy h2,
-  .home-day-copy p,
-  .home-day-copy button,
-  .home-day-main > img,
-  .home-day-notes p,
-  .home-forest-section h2 {
+  .home-reveal-section {
+    opacity: 1;
+    transform: none;
     transition: none;
     will-change: auto;
-  }
-
-  .home-day-copy h2:hover,
-  .home-day-copy p:hover,
-  .home-day-copy button:hover,
-  .home-day-main > img:hover,
-  .home-day-notes p:hover,
-  .home-forest-section h2:hover {
-    transform: none;
   }
 }
 
@@ -2921,7 +2926,7 @@ main {
 .home-business-footer {
   display: flex;
   align-items: flex-end;
-  min-height: clamp(520px, 58vw, 720px);
+  min-height: var(--home-section-height);
   padding: clamp(80px, 8vw, 120px) clamp(24px, 3vw, 42px) clamp(68px, 7vw, 96px);
   border-top: 0;
   background: #fffdf8;
@@ -2937,7 +2942,7 @@ main {
   margin: 0 0 24px;
   font-family: var(--display-font);
   font-size: clamp(50px, 5.1vw, 78px);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 0.86;
   letter-spacing: 0;
   font-optical-sizing: auto;
@@ -2980,7 +2985,7 @@ main {
 .home-footer-info dd {
   margin: 0;
   font-size: 15px;
-  font-weight: 400;
+  font-weight: 800;
   line-height: 1.2;
 }
 
@@ -3619,7 +3624,7 @@ main {
   }
 
   .home-hero {
-    min-height: 640px;
+    min-height: 560px;
   }
 
   .home-hero-content {
@@ -3633,7 +3638,7 @@ main {
 
   .home-day-section {
     gap: 42px;
-    min-height: 0;
+    min-height: 560px;
     padding: 58px clamp(22px, 6vw, 44px) 34px;
   }
 
@@ -3665,6 +3670,11 @@ main {
     padding: 18px 0 0;
   }
 
+  .home-day-notes p:nth-child(2),
+  .home-day-notes p:nth-child(3) {
+    justify-self: start;
+  }
+
   .home-forest-section {
     min-height: 560px;
   }
@@ -3676,8 +3686,8 @@ main {
   }
 
   .home-business-footer {
-    min-height: 500px;
-    padding: 78px clamp(22px, 6vw, 44px) 64px;
+    min-height: 560px;
+    padding: 64px clamp(22px, 6vw, 44px) 56px;
   }
 
   .home-footer-inner h2 {
@@ -3817,7 +3827,7 @@ main {
   }
 
   .home-hero {
-    min-height: 600px;
+    min-height: 500px;
   }
 
   .home-hero-content h1 {
@@ -3831,6 +3841,7 @@ main {
   }
 
   .home-day-section {
+    min-height: 500px;
     padding-top: 52px;
   }
 
@@ -3847,9 +3858,10 @@ main {
   }
 
   .home-business-footer {
-    min-height: 470px;
-    padding-top: 70px;
-    padding-bottom: 58px;
+    align-items: flex-start;
+    min-height: 500px;
+    padding-top: 44px;
+    padding-bottom: 48px;
   }
 
   .home-footer-info {

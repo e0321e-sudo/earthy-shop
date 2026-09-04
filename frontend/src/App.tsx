@@ -1868,8 +1868,44 @@ function CartNotice({
 }
 
 function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) {
+  const homeRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const root = homeRef.current;
+    if (!root) {
+      return;
+    }
+
+    const revealSections = Array.from(root.querySelectorAll<HTMLElement>(".home-reveal-section"));
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+      revealSections.forEach((section) => section.classList.add("is-visible"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      {
+        rootMargin: "0px 0px -18% 0px",
+        threshold: 0.18,
+      },
+    );
+
+    revealSections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <section className="home-view">
+    <section className="home-view" ref={homeRef}>
       <section className="home-hero" aria-label="EARTHY 메인">
         <img {...protectedImageProps()} src="/assets/about-panorama/panorama-09.jpeg" alt="바람이 지나는 언덕" />
         <div className="home-hero-content">
@@ -1884,7 +1920,7 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
         </div>
       </section>
 
-      <section className="home-day-section">
+      <section className="home-day-section home-reveal-section">
         <div className="home-day-main">
           <div className="home-day-copy">
             <h2>Pieces of a day</h2>
@@ -1921,7 +1957,7 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
         </div>
       </section>
 
-      <section className="home-forest-section">
+      <section className="home-forest-section home-reveal-section">
         <img {...protectedImageProps()} src="/assets/products/forest-walk.jpeg" alt="숲길에 남은 오후의 빛" />
         <h2>
           Some days return to us in the
