@@ -1440,9 +1440,11 @@ main {
 .about-view {
   display: flex;
   flex-direction: column;
-  gap: clamp(36px, 4.5vw, 64px);
+  gap: clamp(32px, 3.5vw, 48px);
   max-width: 880px;
-  margin: clamp(18px, 3vw, 38px) auto 0;
+  margin: clamp(18px, 3vw, 38px) 0 0;
+  padding-bottom: calc(clamp(36px, 4.5vw, 64px) - clamp(32px, 3.5vw, 48px));
+  text-align: left;
 }
 
 .about-view h1 {
