@@ -2,7 +2,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
-  background: #f7f6f2;
+  background: var(--page-bg);
   color: #15130f;
 }
 
@@ -27,7 +27,7 @@
   gap: 28px;
   padding: 28px 20px;
   border-right: 1px solid #d9d4ca;
-  background: #fbfaf7;
+  background: var(--page-bg);
 }
 
 .admin-logo {
@@ -59,7 +59,8 @@
 }
 
 .admin-nav button.is-active {
-  background: rgba(21, 19, 15, 0.12);
+  background: var(--page-bg);
+  box-shadow: inset 0 0 0 1px #d9d4ca;
   color: #15130f;
 }
 
@@ -477,7 +478,7 @@ button.admin-metric-card:hover {
 }
 
 .admin-table tbody tr.is-private {
-  background: rgba(21, 19, 15, 0.035);
+  background: var(--page-bg);
   color: rgba(21, 19, 15, 0.45);
 }
 
@@ -492,7 +493,9 @@ button.admin-metric-card:hover {
 
 .admin-table tbody tr:hover,
 .admin-table tbody tr.is-selected {
-  background: #f2f0ea;
+  background: var(--page-bg);
+  outline: 1px solid #d9d4ca;
+  outline-offset: -1px;
 }
 
 .admin-order-number-button {
@@ -650,7 +653,7 @@ button.admin-metric-card:hover {
   padding: 11px 12px;
   border: 1px solid #d7d2c7;
   border-radius: 0;
-  background: #fff;
+  background: var(--page-bg);
   font-weight: 400;
 }
 
@@ -665,7 +668,7 @@ button.admin-metric-card:hover {
   padding: 11px 36px 11px 12px;
   border: 1px solid #d7d2c7;
   border-radius: 0;
-  background-color: #fff;
+  background-color: var(--page-bg);
   color: #111;
   font-size: 16px;
   font-weight: 400;
@@ -700,7 +703,7 @@ button.admin-metric-card:hover {
   width: 180px;
   margin-top: 10px;
   border: 1px solid #d7d2c7;
-  background: #fff;
+  background: var(--page-bg);
 }
 
 .admin-image-preview img {
@@ -937,7 +940,7 @@ button.admin-metric-card:hover {
 .admin-filter-row select {
   height: 38px;
   border: 1px solid #d9d2c8;
-  background: #f8f6f1;
+  background: var(--page-bg);
   color: #15130f;
   padding: 0 10px;
   font: inherit;
@@ -1058,7 +1061,7 @@ button.admin-metric-card:hover {
 
 .admin-community-list-card .admin-community-table th {
   height: 40px;
-  background: #f4f3f0;
+  background: var(--page-bg);
   color: #5f5a52;
   font-size: 11px;
 }
@@ -1280,7 +1283,7 @@ button.admin-metric-card:hover {
   overflow-y: auto;
   padding: 24px;
   border: 1px solid #d9d4ca;
-  background: #fbfaf7;
+  background: var(--page-bg);
   box-shadow: 0 18px 42px rgba(21, 19, 15, 0.16);
 }
 
@@ -1337,7 +1340,7 @@ button.admin-metric-card:hover {
   padding: 11px 12px;
   border: 1px solid #d7d2c7;
   border-radius: 0;
-  background: #fff;
+  background: var(--page-bg);
   font: inherit;
   font-weight: 400;
 }
@@ -1371,7 +1374,7 @@ button.admin-metric-card:hover {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #fbfaf7;
+  background: var(--page-bg);
 }
 
 .admin-login-card {
@@ -1380,7 +1383,7 @@ button.admin-metric-card:hover {
   gap: 18px;
   padding: 34px 28px;
   border: 1px solid #d9d4ca;
-  background: #fff;
+  background: var(--page-bg);
 }
 
 .admin-login-card h1 {
@@ -1443,7 +1446,7 @@ button.admin-metric-card:hover {
     min-height: 70px;
     padding: 18px 18px;
     border-bottom: 1px solid #d9d4ca;
-    background: #fbfaf7;
+    background: var(--page-bg);
   }
 
   .admin-menu-button {
@@ -1786,7 +1789,7 @@ button.admin-metric-card:hover {
 
   .admin-mobile-order-card:hover,
   .admin-mobile-order-card:active {
-    background: #f2f0ea;
+    background: var(--page-bg);
   }
 
   .admin-mobile-order-card:hover .admin-mobile-order-number,

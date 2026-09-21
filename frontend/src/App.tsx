@@ -1798,11 +1798,7 @@ function Header({
       </nav>
 
       <button className="brand-button" type="button" onClick={handleHome} aria-label="EARTHY home">
-        {page === "home" ? (
-          <span className="home-brand-text">EARTHY</span>
-        ) : (
-          <img src="/assets/earthy-logo-transparent.png" alt="EARTHY" />
-        )}
+        <span className="brand-text">EARTHY</span>
       </button>
 
       <div className="header-actions">
