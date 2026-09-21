@@ -5379,7 +5379,6 @@ function About() {
     <section className="page-view about-page">
       <div className="about-view">
         <div>
-          <span>01 / ABOUT EARTHY</span>
           <h1>
             Nature,
             <br />
@@ -5389,11 +5388,9 @@ function About() {
           </h1>
         </div>
         <p>
-          계절이 지나면 다시 만날 수 없는 풍경, 바람의 결, 빛의 온도, 숲의 숨결을 사진으로 담아
-          엽서와 포스터, 포토북으로 전합니다.
+          계절이 지나면 다시 만날 수 없는 순간을
           <br />
-          <br />
-          자연을 오래 곁에 두는 가장 작은 방법 EARTHY.
+          사진으로 담아 엽서와 포스터, 포토북으로 전합니다.
         </p>
       </div>
 
