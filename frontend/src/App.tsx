@@ -1863,20 +1863,20 @@ function CartNotice({
   );
 }
 
-function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) {
-  const homeRef = useRef<HTMLElement | null>(null);
+function useHomeReveal(enabled = true) {
+  const revealRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const root = homeRef.current;
-    if (!root) {
+    const root = revealRef.current;
+    if (!enabled || !root) {
       return;
     }
 
-    const revealSections = Array.from(root.querySelectorAll<HTMLElement>(".home-reveal-section"));
+    const revealContents = Array.from(root.querySelectorAll<HTMLElement>(".home-reveal-content"));
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (prefersReducedMotion || !("IntersectionObserver" in window)) {
-      revealSections.forEach((section) => section.classList.add("is-visible"));
+      revealContents.forEach((content) => content.classList.add("is-visible"));
       return;
     }
 
@@ -1890,15 +1890,21 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
         });
       },
       {
-        rootMargin: "0px 0px -18% 0px",
+        rootMargin: "0px 0px -24px 0px",
         threshold: 0.18,
       },
     );
 
-    revealSections.forEach((section) => observer.observe(section));
+    revealContents.forEach((content) => observer.observe(content));
 
     return () => observer.disconnect();
-  }, []);
+  }, [enabled]);
+
+  return revealRef;
+}
+
+function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) {
+  const homeRef = useHomeReveal();
 
   return (
     <section className="home-view" ref={homeRef}>
@@ -1916,11 +1922,11 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
         </div>
       </section>
 
-      <section className="home-day-section home-reveal-section">
+      <section className="home-day-section">
         <div className="home-day-main">
           <div className="home-day-copy">
-            <h2>Pieces of a day</h2>
-            <p>
+            <h2 className="home-reveal-content">Pieces of a day</h2>
+            <p className="home-reveal-content">
               그날의 빛과 공기,
               <br />
               스쳐 지나간 바람까지.
@@ -1929,33 +1935,33 @@ function Home({ onShop, onAbout }: { onShop: () => void; onAbout: () => void }) 
               <br />
               오래 마음에 남습니다.
             </p>
-            <button type="button" onClick={onAbout}>
+            <button className="home-reveal-content" type="button" onClick={onAbout}>
               ABOUT US →
             </button>
           </div>
 
-          <img {...protectedImageProps()} src="/assets/about-panorama/panorama-10.jpeg" alt="빛을 머금은 꽃" />
+          <img {...protectedImageProps("home-reveal-content")} src="/assets/about-panorama/panorama-10.jpeg" alt="빛을 머금은 꽃" />
         </div>
 
         <div className="home-day-notes">
-          <p>
+          <p className="home-reveal-content">
             <strong>Quiet days</strong>
             <span>for slow, ordinary moments</span>
           </p>
-          <p>
+          <p className="home-reveal-content">
             <strong>Passing light</strong>
             <span>the light that stayed with us</span>
           </p>
-          <p>
+          <p className="home-reveal-content">
             <strong>Soft memories</strong>
             <span>the moments we keep close</span>
           </p>
         </div>
       </section>
 
-      <section className="home-forest-section home-reveal-section">
+      <section className="home-forest-section">
         <img {...protectedImageProps()} src="/assets/products/forest-walk.jpeg" alt="숲길에 남은 오후의 빛" />
-        <h2>
+        <h2 className="home-reveal-content">
           Some days return to us in the
           <br />
           light, the air, and the wind.
@@ -5379,15 +5385,10 @@ function About() {
     <section className="page-view about-page">
       <div className="about-view">
         <div>
-          <h1>
-            Nature,
-            <br />
-            remembered.
-            <br />
-            자연을 오래 간직하는 방법.
-          </h1>
+          <h1>Nature, remembered.</h1>
+          <p className="about-subtitle">자연을 오래 간직하는 방법.</p>
         </div>
-        <p>
+        <p className="about-description">
           계절이 지나면 다시 만날 수 없는 순간을
           <br />
           사진으로 담아 엽서와 포스터, 포토북으로 전합니다.
@@ -5453,18 +5454,20 @@ function FooterLinks({ className = "business-footer-links" }: { className?: stri
 }
 
 function BusinessFooter({ variant = "default" }: { variant?: "default" | "home" }) {
+  const footerRef = useHomeReveal(variant === "home");
+
   if (variant === "home") {
     return (
-      <footer className="business-footer home-business-footer">
+      <footer className="business-footer home-business-footer" ref={footerRef}>
         <div className="home-footer-inner">
-          <h2>EARTHY STUDIO</h2>
+          <h2 className="home-reveal-content">EARTHY STUDIO</h2>
           <FooterLinks className="business-footer-links home-footer-links" />
           <dl className="home-footer-info">
-            <div>
+            <div className="home-reveal-content">
               <dt>BUSINESS NO</dt>
               <dd>877-05-02984</dd>
             </div>
-            <div>
+            <div className="home-reveal-content">
               <dt>E-MAIL</dt>
               <dd>earthy9194@gmail.com</dd>
             </div>
